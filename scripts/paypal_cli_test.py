@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.paypal.client import paypal_client
 
 
-async def test_paypal_flow():
+async def run_paypal_flow():
     print("\n=======================================================")
     print("   FINDABLE PAYPAL INTEGRATION VERIFICATION SCRIPT")
     print(f"   Mode: {'OFFLINE MOCK' if paypal_client.is_mock else 'LIVE SANDBOX'}")
@@ -100,5 +100,5 @@ async def test_paypal_flow():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_paypal_flow())
+    asyncio.run(run_paypal_flow())
 

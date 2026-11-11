@@ -195,10 +195,28 @@ Navigate in your browser to:
 
 ## Connecting Claude Desktop to Findable MCP
 
-Add Findable as an MCP server in your Claude Desktop configuration file:
+Findable exposes its Model Context Protocol tools via stdio or streamable HTTP.
+
+### Option A: Standard Stdio Transport (Recommended for Claude Desktop)
+Add Findable to your Claude Desktop configuration:
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "findable": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "C:\\Users\\HP\\Desktop\\ml comp"
+    }
+  }
+}
+```
+
+### Option B: Streamable HTTP Transport
+With the Findable server running (`uvicorn app.main:app` on port 8000), Claude Desktop connects directly to the `/mcp` streamable endpoint:
 
 ```json
 {
@@ -211,8 +229,15 @@ Add Findable as an MCP server in your Claude Desktop configuration file:
 }
 ```
 
+### Available Tools
+1. `search_products`: Search cosmetic products by keyword, category, price, undertone, depth.
+2. `match_shade`: Calculate mathematical CIEDE2000 ΔE between a customer reference and catalog shades.
+3. `get_shade_passport`: Retrieve SHA-256 canonical hash & HMAC-SHA256 signature for a shade.
+4. `create_checkout`: Initialize a verified server-authoritative PayPal Orders v2 checkout.
+5. `get_order_status`: Real-time PayPal order status tracking.
+
 Restart Claude Desktop, and you can prompt:
-> *"My current foundation is REF-7K2Q. Find me a match in Priya's catalog under $30 with a ΔE under 2.0, explain the match, and give me a checkout link."*
+> *"My current foundation is REF-SAMPLE. Find me a match in Priya's catalog under $30 with a ΔE under 2.0, explain the match, and give me a checkout link."*
 
 ---
 

@@ -145,3 +145,4 @@ async def test_listing_generation_empty_when_no_key(monkeypatch):
     res = client.post("/api/listing/draft", json={"product_name": "Silk Foundation"})
     assert res.status_code == 200
     assert res.json()["description"] == ""
+

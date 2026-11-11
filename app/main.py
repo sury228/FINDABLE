@@ -38,11 +38,20 @@ from app.services import (
 settings = get_settings()
 
 
+from app.mcp_server import mcp
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown hooks."""
     init_db()
-    yield
+    try:
+        if hasattr(mcp, "session_manager"):
+            async with mcp.session_manager.run():
+                yield
+        else:
+            yield
+    except RuntimeError:
+        yield
 
 
 app = FastAPI(
@@ -56,16 +65,16 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# Mount FastMCP SSE transport if available
-try:
-    from app.mcp_server import mcp
-    app.mount("/sse", mcp.sse_app())
-except Exception:
-    pass
+# Mount FastMCP server using streamable HTTP at /mcp
+from app.mcp_server import mcp
+if hasattr(mcp, "streamable_http_app"):
+    app.mount("/mcp", mcp.streamable_http_app(streamable_http_path="/"))
+elif hasattr(mcp, "sse_app"):
+    app.mount("/mcp", mcp.sse_app())
 
 
 # ==============================================================================
-# Health Check & Root Redirect & MCP Discovery
+# Health Check & Root Redirect & MCP Info
 # ==============================================================================
 
 @app.get("/health")
@@ -74,17 +83,17 @@ def health_check():
     return {"status": "healthy", "service": "findable", "mock_paypal": settings.MOCK_PAYPAL}
 
 
-@app.get("/mcp")
-def mcp_discovery():
-    """MCP server discovery endpoint for AI Agents and judges."""
+@app.get("/mcp-info")
+def mcp_info_view():
+    """MCP server info endpoint for AI Agents and judges."""
     return {
         "status": "online",
         "name": "Findable Shade Matcher",
-        "protocol": "Model Context Protocol (FastMCP)",
+        "protocol": "Model Context Protocol (Streamable HTTP)",
         "version": "1.0.0",
         "transports": {
             "stdio": "python -m app.mcp_server",
-            "sse": "/sse"
+            "streamable_http": "/mcp"
         },
         "tools_count": 5,
         "tools": [
