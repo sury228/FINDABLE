@@ -6,84 +6,12 @@
   },
   "buyer_references": [
     {
-      "id": "REF-7K2Q",
+      "id": "REF-SAMPLE",
       "L": 62.4,
       "a": 13.9,
       "b": 24.1,
-      "source": "demo",
-      "note": "Medium tan, neutral undertone → matches Honey 04"
-    },
-    {
-      "id": "REF-DEMO",
-      "L": 76.0,
-      "a": 9.4,
-      "b": 20.1,
-      "source": "demo",
-      "note": "Light, neutral undertone → matches Sand 03"
-    },
-    {
-      "id": "REF-FAIR",
-      "L": 89.2,
-      "a": 5.1,
-      "b": 11.2,
-      "source": "demo",
-      "note": "Very fair, warm undertone → matches Almond 01"
-    },
-    {
-      "id": "REF-LITE",
-      "L": 82.1,
-      "a": 7.8,
-      "b": 16.4,
-      "source": "demo",
-      "note": "Light warm → matches Ivory 02"
-    },
-    {
-      "id": "REF-WARM",
-      "L": 55.6,
-      "a": 15.8,
-      "b": 26.2,
-      "source": "demo",
-      "note": "Medium deep warm → matches Amber 05"
-    },
-    {
-      "id": "REF-DEEP",
-      "L": 42.1,
-      "a": 16.9,
-      "b": 25.4,
-      "source": "demo",
-      "note": "Deep warm → matches Praline 07"
-    },
-    {
-      "id": "REF-RICH",
-      "L": 29.5,
-      "a": 15.1,
-      "b": 20.3,
-      "source": "demo",
-      "note": "Rich cool → matches Cacao 09"
-    },
-    {
-      "id": "REF-DARK",
-      "L": 18.6,
-      "a": 12.3,
-      "b": 14.8,
-      "source": "demo",
-      "note": "Very deep cool → matches Ebony 11"
-    },
-    {
-      "id": "REF-COOL",
-      "L": 35.8,
-      "a": 16.2,
-      "b": 22.9,
-      "source": "demo",
-      "note": "Deep cool → matches Chestnut 08"
-    },
-    {
-      "id": "REF-CARA",
-      "L": 48.2,
-      "a": 17.5,
-      "b": 27.8,
-      "source": "demo",
-      "note": "Medium deep neutral → matches Caramel 06"
+      "source": "sample",
+      "note": "Sample reference for judges demo — medium tan, neutral undertone → matches Honey 04"
     }
   ],
   "products": [

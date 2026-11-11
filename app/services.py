@@ -1,21 +1,19 @@
 """Core domain services shared by MCP server, Web Agent, and UI routes."""
 
 import json
+import math
 import uuid
 from typing import Any, Dict, List, Optional, Union
 from sqlmodel import Session, select
 
-from app.color.metrics import calculate_match_score
-from app.color.pipeline import delta_e
+from app.color.metrics import calculate_ita, calculate_match_score, depth_from_ita, undertone_from_hue
+from app.color.pipeline import delta_e, hex_to_lab, lab_to_hex
 from app.config import get_settings
 from app.models import BuyerReference, Order, Product, PromiseClaim, Shade
 from app.passport import compute_bundle_hash, create_shade_passport_dict, sign_passport
 from app.paypal.client import paypal_client
 
 settings = get_settings()
-
-# Transient in-memory cache for user-uploaded swatch queries (never added to product catalog)
-QUERY_REFERENCE_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def search_products(
@@ -72,34 +70,44 @@ def match_shade(
     reference: Union[str, List[float]],
     category: Optional[str] = None,
     max_price: Optional[float] = None,
-    limit: int = 3,
+    limit: int = 5,
 ) -> List[Dict[str, Any]]:
-    """Find closest matching shades based on CIEDE2000 ΔE and undertone alignment."""
+    """Find closest matching shades based on CIEDE2000 ΔE and undertone alignment.
+
+    Raises ValueError if the reference cannot be resolved. No silent defaults.
+    """
     ref_lab: Optional[List[float]] = None
     ref_undertone: Optional[str] = None
 
     # 1. Resolve reference to CIELAB coordinates
-    if isinstance(reference, str) and reference.startswith("REF-"):
+    if isinstance(reference, str) and reference.upper().startswith("REF-"):
         clean_code = reference.upper().strip()
-        if clean_code in QUERY_REFERENCE_CACHE:
-            cached = QUERY_REFERENCE_CACHE[clean_code]
-            ref_lab = [cached["L"], cached["a"], cached["b"]]
-        else:
-            buyer_ref = session.exec(
-                select(BuyerReference).where(BuyerReference.ref_code == clean_code)
-            ).first()
-            if buyer_ref:
-                ref_lab = [buyer_ref.L, buyer_ref.a, buyer_ref.b]
+        buyer_ref = session.exec(
+            select(BuyerReference).where(BuyerReference.ref_code == clean_code)
+        ).first()
+        if not buyer_ref:
+            raise ValueError(f"Unknown reference code: {clean_code}. Please upload a swatch photo first to get a valid REF code.")
+        ref_lab = [buyer_ref.L, buyer_ref.a, buyer_ref.b]
     elif isinstance(reference, list) and len(reference) == 3:
         ref_lab = [float(v) for v in reference]
     elif isinstance(reference, str) and reference.startswith("#"):
-        # Hex fallback approximation
-        ref_lab = [60.0, 14.0, 22.0]  # Standard medium tan baseline
+        try:
+            ref_lab = hex_to_lab(reference)
+        except ValueError:
+            raise ValueError(f"Invalid hex color: {reference}. Expected format: #RRGGBB")
+    else:
+        raise ValueError(
+            f"Cannot resolve reference '{reference}'. "
+            "Provide a REF-XXXX code, a hex color (#RRGGBB), or a [L, a, b] array."
+        )
 
     if ref_lab is None:
-        # Default representative baseline for demo
-        ref_lab = [62.4, 13.9, 24.1]
-        ref_undertone = "neutral"
+        raise ValueError("Could not determine reference color. Please upload a swatch photo first.")
+
+    # Compute reference undertone from its hue angle
+    a_val, b_val = ref_lab[1], ref_lab[2]
+    ref_hue_deg = math.degrees(math.atan2(b_val, a_val)) % 360.0
+    ref_undertone = undertone_from_hue(ref_hue_deg)
 
     # 2. Query candidates
     stmt = select(Shade, Product).join(Product, Shade.product_id == Product.id)
@@ -116,7 +124,7 @@ def match_shade(
         d_e = delta_e(ref_lab, cand_lab)
         score, label, explanation = calculate_match_score(
             d_e=d_e,
-            undertone_ref=ref_undertone or shade.undertone,
+            undertone_ref=ref_undertone,
             undertone_cand=shade.undertone,
         )
         candidates.append({
@@ -128,7 +136,7 @@ def match_shade(
             "price": product.price_usd,
             "delta_e": round(d_e, 2),
             "match_score": round(score, 2),
-            "undertone_match": (shade.undertone == (ref_undertone or shade.undertone)),
+            "undertone_match": (shade.undertone == ref_undertone),
             "label": label,
             "explanation": explanation,
             "passport_hash": shade.passport_hash,
@@ -146,6 +154,12 @@ def get_shade_passport_service(session: Session, shade_id: str) -> Optional[Dict
         return None
     product = session.get(Product, shade.product_id)
 
+    # Use stored measured_at for passport consistency
+    measured_at_str = shade.measured_at.isoformat() if shade.measured_at else None
+
+    # Determine method reference based on source
+    method_reference = "white paper" if getattr(shade, "source", "seed") == "measured" else "seed data (not photographed)"
+
     passport = create_shade_passport_dict(
         shade_id=shade.id,
         product_id=product.id if product else "prd_unknown",
@@ -161,7 +175,8 @@ def get_shade_passport_service(session: Session, shade_id: str) -> Optional[Dict
         depth=shade.depth,
         undertone=shade.undertone,
         confidence=shade.confidence,
-        measured_at=shade.measured_at.isoformat() if shade.measured_at else None,
+        measured_at=measured_at_str,
+        method_reference=method_reference,
     )
     p_hash, p_sig = sign_passport(passport)
     passport["hash"] = p_hash
@@ -175,16 +190,21 @@ async def create_checkout(
     agent_name: str = "web-agent",
 ) -> Dict[str, Any]:
     """Create a verified PayPal order strictly using database-authoritative pricing."""
+    if not items:
+        raise ValueError("Cart is empty. Please add at least one shade to your order.")
+
     total_amount = 0.0
     verified_items = []
     passport_hashes = []
 
     for item in items:
         shade_id = item.get("shade_id")
+        if not shade_id:
+            raise ValueError("Each item must include a shade_id.")
         qty = int(item.get("quantity", 1))
         shade = session.get(Shade, shade_id)
         if not shade:
-            continue
+            raise ValueError(f"Unknown shade_id: {shade_id}. Please check the catalog.")
         product = session.get(Product, shade.product_id)
         price = product.price_usd if product else 28.00
         line_total = price * qty
@@ -335,4 +355,3 @@ async def open_shade_promise(
         "refund_id": refund_id,
         "explanation": f"Measured difference ΔE is {d_e:.1f}. Automated refund {'processed' if refund_id else 'not triggered'}.",
     }
-

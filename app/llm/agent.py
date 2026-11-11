@@ -42,17 +42,29 @@ async def run_agent_turn(
     # 1. Checkout intent
     if "buy" in user_lower or "checkout" in user_lower or "order" in user_lower:
         shade_match = re.search(r"\b(shd_[a-z0-9_]+)\b", user_message, re.IGNORECASE)
-        shade_id = shade_match.group(1) if shade_match else "shd_honey04"
+        if not shade_match:
+            # Ask which shade — never default
+            reply = (
+                "Which shade would you like to order? "
+                "Please specify a shade ID (e.g. `shd_honey04`) or first ask me to match your shade "
+                "by uploading a swatch photo with the 📷 button."
+            )
+            return {"reply": reply, "tools_called": [], "cards": []}
 
+        shade_id = shade_match.group(1)
         tools_called.append({
             "tool": "create_checkout",
             "args": {"items": [{"shade_id": shade_id, "quantity": 1}], "agent_name": "findable-web-agent"},
         })
-        checkout_res = await create_checkout(
-            session=session,
-            items=[{"shade_id": shade_id, "quantity": 1}],
-            agent_name="findable-web-agent",
-        )
+        try:
+            checkout_res = await create_checkout(
+                session=session,
+                items=[{"shade_id": shade_id, "quantity": 1}],
+                agent_name="findable-web-agent",
+            )
+        except ValueError as e:
+            return {"reply": str(e), "tools_called": tools_called, "cards": []}
+
         cards.append({
             "type": "checkout",
             "data": checkout_res,
@@ -65,12 +77,25 @@ async def run_agent_turn(
 
     # 2. Matching intent (with reference code or keyword)
     elif detected_ref or "match" in user_lower or "shade" in user_lower or "foundation" in user_lower:
-        active_ref = detected_ref or "REF-7K2Q"
+        if not detected_ref:
+            # Ask to upload a swatch — never use a default reference
+            reply = (
+                "I need your shade reference to find a match. "
+                "Please upload a swatch photo using the 📷 button below, "
+                "or paste your reference code (e.g. `REF-7K2Q`) if you already have one."
+            )
+            return {"reply": reply, "tools_called": [], "cards": []}
+
+        active_ref = detected_ref
         tools_called.append({
             "tool": "match_shade",
             "args": {"reference": active_ref, "max_price": max_price, "limit": 5},
         })
-        matches = match_shade(session=session, reference=active_ref, max_price=max_price, limit=5)
+
+        try:
+            matches = match_shade(session=session, reference=active_ref, max_price=max_price, limit=5)
+        except ValueError as e:
+            return {"reply": str(e), "tools_called": tools_called, "cards": []}
 
         cards.append({
             "type": "matches",
@@ -82,21 +107,21 @@ async def run_agent_turn(
             top = matches[0]
             price_note = f" under ${max_price:.0f}" if max_price else ""
             de = top['delta_e']
-            
+
             if de <= 2.0:
-                match_status = "✅ **Exact Match Found!**"
+                match_status = "**Hard to tell apart** — this shade is very close to your measured skin tone."
             elif de <= 4.0:
-                match_status = "🔍 **Close Match Found:** (Exact shade not in catalog, but closest wearable match)"
+                match_status = "**Close match found** — wearable shade, minor tone difference."
             else:
-                match_status = "❌ **Exact Match Not Found in Catalog:** (Your measured tone is distinct from current shades. Showing nearest available candidates)"
+                match_status = "**Different shade** — no close match in the current catalog. Showing nearest candidates."
 
             reply = (
                 f"{match_status}\n\n"
                 f"Based on your measured reference **{active_ref}**{price_note}, "
-                f"I ranked **{len(matches)} candidate(s)** from Priya's catalogue by CIEDE2000 optical distance.\n\n"
+                f"I ranked **{len(matches)} candidate(s)** from the catalogue by CIEDE2000 optical distance.\n\n"
                 f"Top candidate: **{top['shade_name']}** from *{top['product_name']}* — "
                 f"**ΔE {de:.1f}** ({top['explanation']}), "
-                f"**${top['price']:.2f} USD**, undertone: {top.get('undertone_match') and 'matched ✓' or 'nearby'}.\n\n"
+                f"**${top['price']:.2f} USD**, undertone: {'matched ✓' if top.get('undertone_match') else 'nearby'}.\n\n"
                 f"Click **Order Shade** to purchase with PayPal."
             )
         else:
@@ -114,8 +139,8 @@ async def run_agent_turn(
             "data": results,
         })
         reply = (
-            f"I explored Priya's catalogue and found {len(results)} product line(s) with calibrated Shade Passports. "
-            f"Provide your current foundation reference code (e.g., REF-7K2Q) to find your exact shade!"
+            f"I explored the catalogue and found {len(results)} product line(s) with calibrated Shade Passports. "
+            f"Upload a swatch photo with the 📷 button to find your shade match!"
         )
 
     return {
@@ -123,4 +148,3 @@ async def run_agent_turn(
         "tools_called": tools_called,
         "cards": cards,
     }
-

@@ -89,3 +89,12 @@ def rgb_to_lab(rgb: Sequence[float]) -> List[float]:
     rgb_arr = np.asarray(rgb, dtype=np.float64).reshape(1, 1, 3) / 255.0
     lab = color.rgb2lab(rgb_arr)[0, 0]
     return [round(float(lab[0]), 2), round(float(lab[1]), 2), round(float(lab[2]), 2)]
+
+
+def hex_to_lab(hex_color: str) -> List[float]:
+    """Convert hex color string (e.g. '#C08C6C') to CIELAB [L*, a*, b*]."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"Invalid hex color: {hex_color}")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return rgb_to_lab([r, g, b])

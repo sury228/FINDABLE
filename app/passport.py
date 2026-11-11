@@ -31,6 +31,7 @@ def create_shade_passport_dict(
     undertone: str,
     confidence: int,
     measured_at: str = None,
+    method_reference: str = "white paper",
 ) -> Dict[str, Any]:
     """Construct standard Shade Passport dictionary structure."""
     if measured_at is None:
@@ -59,7 +60,7 @@ def create_shade_passport_dict(
         },
         "confidence": confidence,
         "method": {
-            "reference": "white paper",
+            "reference": method_reference,
             "illuminant": "D65",
             "delta_e": "CIEDE2000",
             "pipeline": "findable-color 0.1",

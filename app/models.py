@@ -57,6 +57,7 @@ class Shade(SQLModel, table=True):
     depth: str = Field(description="very light, light, medium, tan, deep, rich")
     undertone: str = Field(description="warm, neutral, cool")
     confidence: int = Field(default=100, description="Measurement confidence 0-100")
+    source: str = Field(default="seed", description="'seed' for seeded shades, 'measured' for photographed")
     swatch_photo_path: Optional[str] = Field(default=None)
     box: Optional[str] = Field(default=None, description="JSON coordinates [x0, y0, x1, y1]")
     measured_at: datetime = Field(default_factory=utc_now)

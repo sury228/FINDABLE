@@ -33,6 +33,8 @@ def get_session() -> Generator[Session, None, None]:
 
 def seed_db(session: Session) -> None:
     """Seed Priya's demo shop, foundation product, 12 shades, and buyer references."""
+    from app.passport import create_shade_passport_dict, sign_passport
+
     seed_file = Path("data/seed/seed_data.json")
     data: dict = {}
     if seed_file.exists():
@@ -122,9 +124,33 @@ def seed_db(session: Session) -> None:
                 depth=s["depth"],
                 undertone=s["undertone"],
                 confidence=s.get("confidence", 92),
-                passport_hash=s.get("passport_hash"),
-                passport_sig=s.get("passport_sig"),
+                source="seed",
             )
+            session.add(shade)
+            session.flush()  # get measured_at set
+
+            # Recompute passport hash at seed time (not from seed_data.json)
+            passport = create_shade_passport_dict(
+                shade_id=shade.id,
+                product_id=product.id,
+                product_name=product.name,
+                category=product.category,
+                price_usd=product.price_usd,
+                shade_name=shade.shade_name,
+                hex_color=shade.hex,
+                lab=[shade.L, shade.a, shade.b],
+                chroma=shade.chroma,
+                hue_deg=shade.hue_deg,
+                ita_deg=shade.ita_deg,
+                depth=shade.depth,
+                undertone=shade.undertone,
+                confidence=shade.confidence,
+                measured_at=shade.measured_at.isoformat(),
+                method_reference="seed data (not photographed)",
+            )
+            p_hash, p_sig = sign_passport(passport)
+            shade.passport_hash = p_hash
+            shade.passport_sig = p_sig
             session.add(shade)
 
     session.commit()

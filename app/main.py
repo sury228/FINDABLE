@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 import uuid
 import numpy as np
 from contextlib import asynccontextmanager
@@ -10,20 +11,22 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from skimage import io as skio
+from PIL import Image, ImageOps
 from sqlmodel import Session, select
 
-from app.color.metrics import calculate_ita, depth_from_ita, undertone_from_hue
-from app.color.pipeline import lab_to_hex, rgb_to_lab
+from app.color.metrics import calculate_ita, compute_confidence, depth_from_ita, undertone_from_hue
+from app.color.pipeline import (
+    delta_e, hex_to_lab, lab_to_hex, rgb_to_lab,
+    srgb_to_linear, linear_to_srgb, white_balance, swatch_lab, crop,
+)
 from app.config import get_settings
 from app.db import get_session, init_db
 from app.llm.agent import run_agent_turn
 from app.models import BuyerReference, Order, Product, PromiseClaim, Shade, Shop
-from app.passport import verify_passport
+from app.passport import verify_passport, sign_passport, create_shade_passport_dict
 from app.paypal.client import paypal_client
 from app.paypal.webhooks import process_webhook_event, verify_webhook_signature
 from app.services import (
-    QUERY_REFERENCE_CACHE,
     create_checkout,
     get_order_status,
     get_shade_passport_service,
@@ -83,32 +86,28 @@ def mcp_discovery():
             "stdio": "python -m app.mcp_server",
             "sse": "/sse"
         },
-        "tools_count": 6,
+        "tools_count": 5,
         "tools": [
             {
-                "name": "match_shade_tool",
-                "description": "Calculate mathematical CIEDE2000 ΔE between customer reference and catalog shades."
-            },
-            {
-                "name": "search_products_tool",
+                "name": "search_products",
                 "description": "Filter products by price, coverage, finish, and depth."
             },
             {
-                "name": "get_shade_passport_tool",
+                "name": "match_shade",
+                "description": "Calculate mathematical CIEDE2000 ΔE between customer reference and catalog shades."
+            },
+            {
+                "name": "get_shade_passport",
                 "description": "Retrieve SHA-256 canonical hash & HMAC-SHA256 verifiable signature."
             },
             {
-                "name": "create_checkout_tool",
+                "name": "create_checkout",
                 "description": "Initialize a verified server-authoritative PayPal Orders v2 checkout."
             },
             {
-                "name": "get_order_status_tool",
+                "name": "get_order_status",
                 "description": "Real-time PayPal order telemetry and status tracking."
             },
-            {
-                "name": "open_shade_promise_tool",
-                "description": "Automated dispute resolution: triggers instant PayPal refund if ΔE > 2.5."
-            }
         ]
     }
 
@@ -193,12 +192,6 @@ def shop_view(shop_id: str, request: Request, session: Session = Depends(get_ses
         name="shop.html",
         context={"shop": shop, "products": products, "shades": shades},
     )
-
-
-@app.get("/measure", response_class=HTMLResponse)
-def measure_view(request: Request):
-    """Consumer tool to upload current foundation swatch and acquire a permanent REF- code."""
-    return templates.TemplateResponse(request=request, name="measure.html", context={})
 
 
 @app.get("/passport/{shade_id}", response_class=HTMLResponse)
@@ -300,6 +293,309 @@ async def paypal_webhook_endpoint(
 
 
 # ==============================================================================
+# Measurement API — shared by Studio & Agent
+# ==============================================================================
+
+@app.post("/api/measure")
+async def api_measure(
+    file: UploadFile = File(...),
+    boxes: str = Form(...),
+):
+    """Measure swatches with white-paper lighting correction.
+
+    Accepts multipart form: `file` (image) and `boxes` (JSON string):
+    {"paper": [x0,y0,x1,y1], "swatches": [[x0,y0,x1,y1], ...]}
+    Coordinates are fractions 0-1 of image width/height.
+    """
+    # Parse boxes JSON
+    try:
+        boxes_data = json.loads(boxes)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in 'boxes' field.")
+
+    paper_box_frac = boxes_data.get("paper")
+    swatch_boxes_frac = boxes_data.get("swatches", [])
+
+    if not paper_box_frac or len(paper_box_frac) != 4:
+        raise HTTPException(status_code=400, detail="Paper box is required: [x0, y0, x1, y1] as fractions 0-1.")
+    if not swatch_boxes_frac or len(swatch_boxes_frac) == 0:
+        raise HTTPException(status_code=400, detail="At least one swatch box is required.")
+
+    # Load image with Pillow
+    contents = await file.read()
+    try:
+        pil_img = Image.open(io.BytesIO(contents))
+        pil_img = ImageOps.exif_transpose(pil_img)
+        pil_img = pil_img.convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read image: {e}")
+
+    # Resize so long side is 1600 px
+    w, h = pil_img.size
+    long_side = max(w, h)
+    if long_side > 1600:
+        scale = 1600 / long_side
+        pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        w, h = pil_img.size
+
+    img_rgb = np.array(pil_img, dtype=np.uint8)
+
+    # Convert fractional boxes to pixel coordinates
+    def frac_to_px(box_frac):
+        x0 = int(round(box_frac[0] * w))
+        y0 = int(round(box_frac[1] * h))
+        x1 = int(round(box_frac[2] * w))
+        y1 = int(round(box_frac[3] * h))
+        return [max(0, x0), max(0, y0), min(w, x1), min(h, y1)]
+
+    paper_box = frac_to_px(paper_box_frac)
+
+    # Validate paper box
+    pw = paper_box[2] - paper_box[0]
+    ph = paper_box[3] - paper_box[1]
+    if pw < 10 or ph < 10:
+        raise HTTPException(status_code=400, detail=f"Paper box too small: {pw}x{ph}px. Must be at least 10x10.")
+
+    # White balance the full image
+    balanced_img = white_balance(img_rgb, paper_box)
+
+    # Compute paper stats for confidence
+    paper_crop_raw = crop(img_rgb, paper_box).reshape(-1, 3)
+    from skimage import color as skcolor
+    paper_rgb_norm = paper_crop_raw.astype(np.float64) / 255.0
+    paper_lab_pixels = skcolor.rgb2lab(paper_rgb_norm.reshape(-1, 1, 3)).reshape(-1, 3)
+    paper_l_spread = float(np.std(paper_lab_pixels[:, 0]))
+    raw_paper_l = float(np.median(paper_lab_pixels[:, 0]))
+
+    results = []
+    for i, sb_frac in enumerate(swatch_boxes_frac):
+        if len(sb_frac) != 4:
+            raise HTTPException(status_code=400, detail=f"Swatch box {i+1} must have 4 coordinates.")
+
+        sbox = frac_to_px(sb_frac)
+        sw_w = sbox[2] - sbox[0]
+        sw_h = sbox[3] - sbox[1]
+        if sw_w < 10 or sw_h < 10:
+            raise HTTPException(status_code=400, detail=f"Swatch box {i+1} too small: {sw_w}x{sw_h}px. Must be at least 10x10.")
+
+        # Corrected LAB (after white balance)
+        corrected_lab = swatch_lab(balanced_img, sbox)
+        L, a, b = float(corrected_lab[0]), float(corrected_lab[1]), float(corrected_lab[2])
+
+        # Raw LAB (no white balance) for before/after
+        raw_lin = srgb_to_linear(img_rgb.astype(np.float64))
+        raw_lab = swatch_lab(raw_lin, sbox)
+        raw_hex = lab_to_hex(raw_lab.tolist())
+
+        corrected_hex = lab_to_hex([L, a, b])
+        chroma = float(math.sqrt(a**2 + b**2))
+        hue_deg = float(math.degrees(math.atan2(b, a))) % 360.0
+        ita_deg = calculate_ita(L, b)
+        depth = depth_from_ita(ita_deg)
+        undertone = undertone_from_hue(hue_deg)
+
+        # Compute confidence
+        swatch_crop = crop(img_rgb, sbox).reshape(-1, 3)
+        glare_ratio = float(np.mean(swatch_crop.max(axis=1) >= 250))
+        swatch_rgb_norm = swatch_crop.astype(np.float64) / 255.0
+        swatch_lab_pixels = skcolor.rgb2lab(swatch_rgb_norm.reshape(-1, 1, 3)).reshape(-1, 3)
+        swatch_l_spread = float(np.std(swatch_lab_pixels[:, 0]))
+
+        confidence = compute_confidence(
+            paper_l_spread=paper_l_spread,
+            swatch_glare_ratio=glare_ratio,
+            swatch_l_spread=swatch_l_spread,
+            raw_paper_l=raw_paper_l,
+        )
+
+        results.append({
+            "swatch_index": i,
+            "corrected": {
+                "lab": [round(L, 2), round(a, 2), round(b, 2)],
+                "hex": corrected_hex,
+                "chroma": round(chroma, 2),
+                "hue_deg": round(hue_deg, 2),
+                "ita_deg": round(ita_deg, 2),
+                "depth": depth,
+                "undertone": undertone,
+            },
+            "raw_hex": raw_hex,
+            "confidence": confidence,
+        })
+
+    return {"swatches": results}
+
+
+# ==============================================================================
+# References API — shopper saves measured shade to DB
+# ==============================================================================
+
+@app.post("/api/references")
+async def api_create_reference(
+    payload: Dict[str, Any],
+    session: Session = Depends(get_session),
+):
+    """Create a BuyerReference from measured CIELAB values and return a REF-XXXXXX code."""
+    lab = payload.get("lab")
+    hex_color = payload.get("hex")
+
+    if not lab or len(lab) != 3:
+        raise HTTPException(status_code=400, detail="Lab values [L, a, b] are required.")
+
+    L, a, b = float(lab[0]), float(lab[1]), float(lab[2])
+    if not hex_color:
+        hex_color = lab_to_hex([L, a, b])
+
+    ref_code = f"REF-{uuid.uuid4().hex[:6].upper()}"
+    confidence = int(payload.get("confidence", 90))
+
+    buyer_ref = BuyerReference(
+        ref_code=ref_code,
+        L=round(L, 2),
+        a=round(a, 2),
+        b=round(b, 2),
+        hex=hex_color,
+        confidence=confidence,
+    )
+    session.add(buyer_ref)
+    session.commit()
+
+    return {
+        "ref_code": ref_code,
+        "hex": hex_color,
+        "lab": [round(L, 2), round(a, 2), round(b, 2)],
+    }
+
+
+# ==============================================================================
+# Shades API — seller publishes measured shades to catalog
+# ==============================================================================
+
+@app.post("/api/shades")
+async def api_create_shades(
+    payload: Dict[str, Any],
+    session: Session = Depends(get_session),
+):
+    """Publish one or more measured swatches as Shade rows in the catalog."""
+    swatches = payload.get("swatches", [])
+    if not swatches:
+        raise HTTPException(status_code=400, detail="At least one swatch is required.")
+
+    product_id = payload.get("product_id")
+    if not product_id:
+        # Default to first product
+        first_product = session.exec(select(Product)).first()
+        if not first_product:
+            raise HTTPException(status_code=400, detail="No products exist. Create a product first.")
+        product_id = first_product.id
+
+    product = session.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=400, detail=f"Unknown product_id: {product_id}")
+
+    created_ids = []
+    for sw in swatches:
+        shade_name = sw.get("shade_name")
+        if not shade_name:
+            raise HTTPException(status_code=400, detail="Each swatch must have a shade_name.")
+
+        lab = sw.get("lab", [0, 0, 0])
+        L, a, b = float(lab[0]), float(lab[1]), float(lab[2])
+        hex_color = sw.get("hex") or lab_to_hex([L, a, b])
+        chroma = float(sw.get("chroma", math.sqrt(a**2 + b**2)))
+        hue_deg = float(sw.get("hue_deg", math.degrees(math.atan2(b, a)) % 360.0))
+        ita_deg = float(sw.get("ita_deg", calculate_ita(L, b)))
+        depth = sw.get("depth") or depth_from_ita(ita_deg)
+        undertone = sw.get("undertone") or undertone_from_hue(hue_deg)
+        confidence = int(sw.get("confidence", 90))
+
+        shade_id = f"shd_{uuid.uuid4().hex[:8]}"
+        shade = Shade(
+            id=shade_id,
+            product_id=product_id,
+            shade_name=shade_name,
+            hex=hex_color,
+            L=round(L, 2),
+            a=round(a, 2),
+            b=round(b, 2),
+            chroma=round(chroma, 2),
+            hue_deg=round(hue_deg, 2),
+            ita_deg=round(ita_deg, 2),
+            depth=depth,
+            undertone=undertone,
+            confidence=confidence,
+            source="measured",
+        )
+        session.add(shade)
+        session.flush()
+
+        # Generate and store passport
+        passport = create_shade_passport_dict(
+            shade_id=shade.id,
+            product_id=product.id,
+            product_name=product.name,
+            category=product.category,
+            price_usd=product.price_usd,
+            shade_name=shade.shade_name,
+            hex_color=shade.hex,
+            lab=[shade.L, shade.a, shade.b],
+            chroma=shade.chroma,
+            hue_deg=shade.hue_deg,
+            ita_deg=shade.ita_deg,
+            depth=shade.depth,
+            undertone=shade.undertone,
+            confidence=shade.confidence,
+            measured_at=shade.measured_at.isoformat(),
+            method_reference="white paper",
+        )
+        p_hash, p_sig = sign_passport(passport)
+        shade.passport_hash = p_hash
+        shade.passport_sig = p_sig
+        session.add(shade)
+
+        created_ids.append(shade_id)
+
+    session.commit()
+    return {"created": created_ids}
+
+
+@app.delete("/api/shades/{shade_id}")
+async def api_delete_shade(shade_id: str, session: Session = Depends(get_session)):
+    """Delete a measured shade from the catalog. Only measured shades can be deleted."""
+    shade = session.get(Shade, shade_id)
+    if not shade:
+        raise HTTPException(status_code=404, detail="Shade not found.")
+    if getattr(shade, "source", "seed") != "measured":
+        raise HTTPException(status_code=400, detail="Cannot delete seeded shades.")
+    session.delete(shade)
+    session.commit()
+    return {"deleted": shade_id}
+
+
+@app.get("/api/shades")
+def api_list_shades(session: Session = Depends(get_session)):
+    """List all shades in the catalog."""
+    shades = session.exec(select(Shade)).all()
+    return [
+        {
+            "id": s.id,
+            "shade_name": s.shade_name,
+            "hex": s.hex,
+            "L": s.L,
+            "a": s.a,
+            "b": s.b,
+            "depth": s.depth,
+            "undertone": s.undertone,
+            "confidence": s.confidence,
+            "source": getattr(s, "source", "seed"),
+            "product_id": s.product_id,
+            "passport_hash": s.passport_hash,
+        }
+        for s in shades
+    ]
+
+
+# ==============================================================================
 # Interactive API Endpoints for Frontend & MCP Agents
 # ==============================================================================
 
@@ -318,86 +614,6 @@ async def api_agent_message(payload: Dict[str, Any], session: Session = Depends(
     return turn_res
 
 
-@app.post("/api/measure-reference")
-async def api_measure_reference(
-    payload: Dict[str, Any],
-    session: Session = Depends(get_session),
-):
-    """Generate a temporary in-memory query reference code (e.g. REF-7K2Q) from swatch coordinates."""
-    rgb = payload.get("rgb")
-    lab = payload.get("lab")
-
-    if rgb and not lab:
-        lab = rgb_to_lab(rgb)
-    elif not lab:
-        lab = [62.4, 13.9, 24.1]
-
-    hex_color = payload.get("hex") or lab_to_hex(lab)
-    ref_code = f"REF-{uuid.uuid4().hex[:4].upper()}"
-
-    clean_lab = [float(round(lab[0], 2)), float(round(lab[1], 2)), float(round(lab[2], 2))]
-
-    # Save ONLY to transient query cache — never add user swatches to product catalog
-    QUERY_REFERENCE_CACHE[ref_code] = {
-        "ref_code": ref_code,
-        "L": clean_lab[0],
-        "a": clean_lab[1],
-        "b": clean_lab[2],
-        "hex": hex_color,
-    }
-
-    return {"ref_code": ref_code, "hex": hex_color, "lab": clean_lab}
-
-
-@app.post("/api/upload-swatch")
-async def api_upload_swatch(file: UploadFile = File(...)):
-    """Upload a swatch photo, extract median CIELAB values from center, and generate query reference."""
-    contents = await file.read()
-    try:
-        img = skio.imread(io.BytesIO(contents))
-        # Ensure RGB (strip alpha if RGBA)
-        if img.ndim == 3 and img.shape[2] >= 3:
-            img_rgb = img[:, :, :3]
-        elif img.ndim == 2:
-            img_rgb = np.stack([img] * 3, axis=-1)
-        else:
-            raise ValueError("Unsupported image format")
-
-        # Crop center 40% of the image to sample the swatch/skin
-        h, w = img_rgb.shape[:2]
-        ch0, ch1 = int(h * 0.3), int(h * 0.7)
-        cw0, cw1 = int(w * 0.3), int(w * 0.7)
-        center_patch = img_rgb[ch0:ch1, cw0:cw1]
-
-        # Median RGB
-        median_rgb = np.median(center_patch.reshape(-1, 3), axis=0)
-        lab = rgb_to_lab(median_rgb)
-    except Exception as e:
-        # Fallback if image decode fails
-        lab = [62.4, 13.9, 24.1]
-
-    hex_color = lab_to_hex(lab)
-    ref_code = f"REF-{uuid.uuid4().hex[:4].upper()}"
-
-    clean_lab = [float(round(lab[0], 2)), float(round(lab[1], 2)), float(round(lab[2], 2))]
-
-    # Store in transient query cache (never in database product catalog)
-    QUERY_REFERENCE_CACHE[ref_code] = {
-        "ref_code": ref_code,
-        "L": clean_lab[0],
-        "a": clean_lab[1],
-        "b": clean_lab[2],
-        "hex": hex_color,
-    }
-
-    return {
-        "ref_code": ref_code,
-        "hex": hex_color,
-        "lab": clean_lab,
-        "status": "success",
-    }
-
-
 @app.post("/api/demo/reset")
 def api_demo_reset(session: Session = Depends(get_session)):
     """Reset database to initial pristine state for hackathon judges."""
@@ -405,10 +621,11 @@ def api_demo_reset(session: Session = Depends(get_session)):
     from sqlmodel import delete
     session.exec(delete(PromiseClaim))
     session.exec(delete(Order))
-    session.exec(delete(Shade))
-    session.exec(delete(Product))
-    session.exec(delete(Shop))
+    # Delete measured shades but keep seeded ones
+    session.exec(delete(Shade).where(Shade.source == "measured"))
+    # Delete buyer references except the sample one
+    session.exec(delete(BuyerReference).where(BuyerReference.ref_code != "REF-SAMPLE"))
     session.commit()
+    # Re-seed if needed
     seed_db(session)
     return {"status": "reset_complete"}
-

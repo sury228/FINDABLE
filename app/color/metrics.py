@@ -105,15 +105,15 @@ def calculate_match_score(
 
     if d_e <= 2.0 and undertone_penalty == 0.0:
         label = "match"
-        explanation = f"ΔE {d_e:.1f} — virtually imperceptible difference; exact {undertone_ref} undertone match."
+        explanation = f"ΔE {d_e:.1f} — hard to tell apart; same {undertone_ref} undertone."
     elif d_e <= 2.0:
         label = "close"
-        explanation = f"ΔE {d_e:.1f} — close color depth, but differs slightly in undertone ({undertone_cand} vs {undertone_ref})."
+        explanation = f"ΔE {d_e:.1f} — hard to tell apart in depth, but differs in undertone ({undertone_cand} vs {undertone_ref})."
     elif d_e <= 4.0:
         label = "close"
-        explanation = f"ΔE {d_e:.1f} — wearable shade match with minor tone variance."
+        explanation = f"ΔE {d_e:.1f} — close, wearable shade match with minor tone variance."
     else:
         label = "different"
-        explanation = f"ΔE {d_e:.1f} — visibly distinct shade."
+        explanation = f"ΔE {d_e:.1f} — visibly different shade."
 
     return total_score, label, explanation

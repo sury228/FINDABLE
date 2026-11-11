@@ -1,145 +1,160 @@
-// Findable AI Shopping Agent: Conversational loop, match cards & telemetry stream
+// Findable AI Shopping Agent: Conversational loop, match cards & box-draw swatch upload
+
+let agentBoxDraw = null;
+let agentCurrentRef = null;
+
+// ─── Measure Drawer ───────────────────────────────────────────────────────────
+
+function openMeasureDrawer() {
+    document.getElementById('measureDrawer').classList.remove('hidden');
+}
+
+function closeMeasureDrawer() {
+    document.getElementById('measureDrawer').classList.add('hidden');
+}
+
+function sendRefToChat() {
+    if (!agentCurrentRef) return;
+    const userInput = document.getElementById('userInput');
+    const chatForm = document.getElementById('chatForm');
+    userInput.value = `My shade is ${agentCurrentRef}, find me a match`;
+    closeMeasureDrawer();
+    chatForm.dispatchEvent(new Event('submit'));
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chatForm');
     const userInput = document.getElementById('userInput');
     const chatContainer = document.getElementById('chatContainer');
-    const toggleTelemetryBtn = document.getElementById('toggleTelemetryBtn');
-    const telemetryPanel = document.getElementById('telemetryPanel');
-    const telemetryLog = document.getElementById('telemetryLog');
+    const agentFileInput = document.getElementById('agentFileInput');
+    const agentCanvasWrap = document.getElementById('agentCanvasWrap');
+    const agentCanvas = document.getElementById('agentCanvas');
+    const agentMeasureBtn = document.getElementById('agentMeasureBtn');
+    const agentBoxStatus = document.getElementById('agentBoxStatus');
 
     let history = [];
 
-    // Toggle Behind-the-Scenes telemetry drawer if present
-    if (toggleTelemetryBtn && telemetryPanel) {
-        toggleTelemetryBtn.addEventListener('click', () => {
-            telemetryPanel.classList.toggle('hidden');
-        });
+    // ── File picker → load into BoxDraw ──────────────────────────────────────
+    agentFileInput.addEventListener('change', async (e) => {
+        if (!e.target.files || !e.target.files[0]) return;
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            agentCanvasWrap.classList.remove('hidden');
+            if (!agentBoxDraw) {
+                agentBoxDraw = new BoxDraw(agentCanvas, onAgentBoxChange);
+            }
+            await agentBoxDraw.loadImage(evt.target.result);
+            agentBoxStatus.textContent = 'Draw Paper box first (white paper reference)';
+            agentMeasureBtn.disabled = true;
+            document.getElementById('agentMeasureResult').classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function onAgentBoxChange(boxes) {
+        if (!boxes.paper) {
+            agentBoxStatus.textContent = 'Draw Paper box first (white paper reference)';
+            agentMeasureBtn.disabled = true;
+        } else if (boxes.swatches.length === 0) {
+            agentBoxStatus.textContent = 'Now draw your Swatch box';
+            agentMeasureBtn.disabled = true;
+        } else {
+            agentBoxStatus.textContent = `Paper ✓ · ${boxes.swatches.length} swatch box(es). Ready to measure.`;
+            agentMeasureBtn.disabled = false;
+        }
     }
 
-    const cameraBtn = document.getElementById('cameraBtn');
-    const agentFileInput = document.getElementById('agentFileInput');
+    window.runAgentMeasure = async () => {
+        const boxes = agentBoxDraw.getBoxes();
+        if (!boxes.paper || boxes.swatches.length === 0) {
+            alert('Please draw a Paper box and at least one Swatch box first.');
+            return;
+        }
+        agentMeasureBtn.disabled = true;
+        agentBoxStatus.textContent = 'Measuring…';
 
-    window.setInput = (text) => {
-        userInput.value = text;
-        userInput.focus();
+        const formData = new FormData();
+        // Re-read the uploaded file
+        formData.append('file', agentFileInput.files[0]);
+        formData.append('boxes', JSON.stringify({
+            paper: boxes.paper,
+            swatches: boxes.swatches,
+        }));
+
+        try {
+            const res = await fetch('/api/measure', { method: 'POST', body: formData });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail || res.statusText);
+            }
+            const data = await res.json();
+            const sw = data.swatches[0];
+            const lab = sw.corrected.lab;
+
+            // Save reference to DB
+            const refRes = await fetch('/api/references', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lab, hex: sw.corrected.hex, confidence: sw.confidence }),
+            });
+            const refData = await refRes.json();
+            agentCurrentRef = refData.ref_code;
+
+            // Show result
+            document.getElementById('agentSwatchChip').style.backgroundColor = sw.corrected.hex;
+            document.getElementById('agentHex').textContent = sw.corrected.hex;
+            document.getElementById('agentLabDisplay').textContent =
+                `L* ${lab[0]} · a* ${lab[1]} · b* ${lab[2]} · ${sw.corrected.depth} · ${sw.corrected.undertone} · confidence ${sw.confidence}%`;
+            document.getElementById('agentRefCode').textContent = agentCurrentRef;
+            document.getElementById('agentMeasureResult').classList.remove('hidden');
+            agentBoxStatus.textContent = `Measured ✓ — your code: ${agentCurrentRef}`;
+            agentMeasureBtn.disabled = false;
+        } catch (err) {
+            agentBoxStatus.textContent = 'Error: ' + err.message;
+            agentMeasureBtn.disabled = false;
+            alert('Measurement error: ' + err.message);
+        }
     };
 
-    if (agentFileInput) {
-        agentFileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) {
-                const file = e.target.files[0];
-                logTelemetry(`Reading swatch image: ${file.name}...`);
-                const typingEl = appendTypingIndicator();
-                typingEl.innerText = `Measuring swatch photo: extracting CIELAB coordinates...`;
-
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.onload = async () => {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            ctx.drawImage(img, 0, 0);
-
-                            const sx = Math.floor(img.width * 0.3);
-                            const sy = Math.floor(img.height * 0.3);
-                            const sw = Math.max(1, Math.floor(img.width * 0.4));
-                            const sh = Math.max(1, Math.floor(img.height * 0.4));
-
-                            const imgData = ctx.getImageData(sx, sy, sw, sh).data;
-                            let r = 0, g = 0, b = 0, count = 0;
-                            for (let i = 0; i < imgData.length; i += 4) {
-                                if (imgData[i + 3] > 128) {
-                                    r += imgData[i];
-                                    g += imgData[i + 1];
-                                    b += imgData[i + 2];
-                                    count++;
-                                }
-                            }
-
-                            const avgR = count > 0 ? Math.round(r / count) : 192;
-                            const avgG = count > 0 ? Math.round(g / count) : 140;
-                            const avgB = count > 0 ? Math.round(b / count) : 108;
-
-                            const measureRes = await fetch('/api/measure-reference', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ rgb: [avgR, avgG, avgB], confidence: 95 })
-                            });
-                            const data = await measureRes.json();
-                            typingEl.remove();
-
-                            logTelemetry(`CIELAB Extracted: L* ${data.lab[0]}, a* ${data.lab[1]}, b* ${data.lab[2]} (${data.hex}) -> ${data.ref_code}`);
-
-                            // Automatically trigger match search
-                            userInput.value = `My shade is ${data.ref_code} (CIELAB L* ${data.lab[0]}, a* ${data.lab[1]}, b* ${data.lab[2]}), find me a match under $30`;
-                            chatForm.dispatchEvent(new Event('submit'));
-                        } catch (err) {
-                            typingEl.remove();
-                            alert('Measurement error: ' + err);
-                        }
-                    };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    }
-
+    // ── Chat Form ─────────────────────────────────────────────────────────────
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const message = userInput.value.trim();
         if (!message) return;
 
-        // Append User Message
         appendMessage('user', message);
         userInput.value = '';
 
-        logTelemetry(`User -> Agent: "${message}"`);
-
-        // Typing indicator
         const typingEl = appendTypingIndicator();
 
         try {
             const res = await fetch('/api/agent/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: message, history: history }),
+                body: JSON.stringify({ message, history }),
             });
             const data = await res.json();
             typingEl.remove();
 
-            // Stream tool calls to Behind-the-Scenes panel
-            if (data.tools_called && data.tools_called.length > 0) {
-                data.tools_called.forEach((t) => {
-                    logTelemetry(`[MCP Tool Invoked] ${t.tool}(${JSON.stringify(t.args)})`);
-                });
-            }
-
-            // Append Agent Response
             appendMessage('agent', data.reply, data.cards);
-
             history.push({ role: 'user', content: message });
             history.push({ role: 'assistant', content: data.reply });
         } catch (err) {
             typingEl.remove();
-            appendMessage('agent', 'I encountered an issue processing your request. Please check server logs.');
-            logTelemetry(`[Error] ${err}`);
+            appendMessage('agent', 'Error processing request. Please check server logs.');
         }
     });
 
-    function logTelemetry(msg) {
-        if (!telemetryLog) return;
-        const line = document.createElement('div');
-        const time = new Date().toLocaleTimeString();
-        line.innerHTML = `<span class="text-stone-500">[${time}]</span> ${msg}`;
-        telemetryLog.appendChild(line);
-        telemetryLog.scrollTop = telemetryLog.scrollHeight;
+    // ── URL param: auto-search on ?ref= redirect ──────────────────────────────
+    const urlParams = new URLSearchParams(window.location.search);
+    const refParam = urlParams.get('ref');
+    if (refParam) {
+        userInput.value = `My shade is ${refParam}, find me a match`;
+        setTimeout(() => chatForm.dispatchEvent(new Event('submit')), 400);
     }
 
+    // ── Rendering helpers ─────────────────────────────────────────────────────
     function appendMessage(sender, text, cards = []) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `flex items-start gap-3 ${sender === 'user' ? 'flex-row-reverse' : ''}`;
@@ -161,14 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
         textP.innerHTML = formatMarkdown(text);
         content.appendChild(textP);
 
-        // Render interactive cards if present
         if (cards && cards.length > 0) {
             cards.forEach((card) => {
-                if (card.type === 'matches') {
-                    content.appendChild(renderMatchesCard(card.data));
-                } else if (card.type === 'checkout') {
-                    content.appendChild(renderCheckoutCard(card.data));
-                }
+                if (card.type === 'matches') content.appendChild(renderMatchesCard(card.data));
+                else if (card.type === 'checkout') content.appendChild(renderCheckoutCard(card.data));
             });
         }
 
@@ -185,19 +196,19 @@ document.addEventListener('DOMContentLoaded', () => {
         matches.forEach((m) => {
             const item = document.createElement('div');
             item.className = 'bg-[#0d0d0d] rounded-xl p-3 border border-[#262626] flex items-center justify-between gap-3';
-            
+
             let badgeClass = 'bg-[#141414] text-[#a3e635] border-[#262626]';
-            let badgeText = `ΔE ${m.delta_e} • Match`;
-            
+            let badgeText = `ΔE ${m.delta_e} · ${m.label}`;
+
             if (m.delta_e <= 2.0) {
                 badgeClass = 'bg-[#141414] text-[#a3e635] border-[#a3e635]';
-                badgeText = `Exact Match (ΔE ${m.delta_e})`;
+                badgeText = `ΔE ${m.delta_e} — hard to tell apart`;
             } else if (m.delta_e <= 4.0) {
                 badgeClass = 'bg-[#141414] text-yellow-300 border-[#333333]';
-                badgeText = `Close Match (ΔE ${m.delta_e})`;
+                badgeText = `ΔE ${m.delta_e} — close`;
             } else {
                 badgeClass = 'bg-[#141414] text-zinc-400 border-[#333333]';
-                badgeText = `Nearest Candidate (ΔE ${m.delta_e})`;
+                badgeText = `ΔE ${m.delta_e} — different`;
             }
 
             item.innerHTML = `
@@ -235,9 +246,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 Total: <strong class="text-white font-mono">$${checkout.total.toFixed(2)} ${checkout.currency}</strong>
             </div>
             <a href="${checkout.approve_url}" class="btn-lime w-full text-center py-2.5 text-xs font-bold block">
-                Approve in PayPal Sandbox &rarr;
+                Approve in PayPal &rarr;
             </a>
-            <p class="text-[10px] text-[#71717a] text-center">Funds captured only upon your approval.</p>
+            <p class="text-[10px] text-[#71717a] text-center">The agent prepares the order; you approve it in PayPal.</p>
         `;
         return box;
     }
@@ -250,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function appendTypingIndicator() {
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 text-stone-400 text-xs italic';
-        div.innerText = 'Findable agent is evaluating Shade Passports...';
+        div.innerText = 'Findable agent is evaluating Shade Passports…';
         chatContainer.appendChild(div);
         chatContainer.scrollTop = chatContainer.scrollHeight;
         return div;
@@ -260,17 +271,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return str
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="bg-[#1a1a1a] px-1 rounded text-[#a3e635] font-mono text-xs">$1</code>')
             .replace(/\n/g, '<br>');
     }
 
-    // Auto-search if redirected from Seller Studio with ?ref=
-    const urlParams = new URLSearchParams(window.location.search);
-    const refParam = urlParams.get('ref');
-    if (refParam) {
-        userInput.value = `My shade is ${refParam}, find me a match`;
-        setTimeout(() => {
-            chatForm.dispatchEvent(new Event('submit'));
-        }, 300);
-    }
+    window.setInput = (text) => {
+        userInput.value = text;
+        userInput.focus();
+    };
 });
-

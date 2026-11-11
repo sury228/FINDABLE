@@ -11,8 +11,51 @@
                 Findable Shopper Agent
             </h1>
             <p class="text-xs text-[#a1a1aa] mt-0.5">
-                Matches skin tone to Shade Passports via CIEDE2000 ΔE color distance.
+                Upload a swatch photo → draw Paper + Swatch boxes → get your REF code → find matches.
             </p>
+        </div>
+    </div>
+
+    <!-- Measure Drawer (hidden until camera button clicked) -->
+    <div id="measureDrawer" class="hidden bg-[#0a0a0a] border border-[#262626] rounded-xl p-4 space-y-3">
+        <div class="flex justify-between items-center">
+            <span class="text-xs font-mono uppercase tracking-wider text-[#a1a1aa]">📷 Measure Your Shade</span>
+            <button onclick="closeMeasureDrawer()" class="text-xs text-[#71717a] hover:text-white transition">✕ Close</button>
+        </div>
+        <p class="text-[11px] text-[#71717a]">1. Upload photo &bull; 2. Draw the white Paper box &bull; 3. Draw your Swatch box &bull; 4. Click Measure</p>
+
+        <input type="file" id="agentFileInput" class="hidden" accept="image/*">
+        <label for="agentFileInput" class="btn-lime text-xs py-2 px-4 inline-block cursor-pointer">
+            Choose Photo
+        </label>
+
+        <!-- Canvas for box drawing -->
+        <div id="agentCanvasWrap" class="hidden relative">
+            <canvas id="agentCanvas" class="rounded-lg border border-[#333333] w-full" style="touch-action:none;"></canvas>
+            <div class="flex gap-2 mt-2 flex-wrap">
+                <button onclick="agentBoxDraw.undo()" class="btn-outline text-xs py-1 px-3">Undo</button>
+                <button onclick="agentBoxDraw.clear()" class="btn-outline text-xs py-1 px-3">Clear</button>
+                <button onclick="runAgentMeasure()" id="agentMeasureBtn" class="btn-lime text-xs py-1 px-4 disabled:opacity-40" disabled>Measure →</button>
+                <span id="agentBoxStatus" class="text-[11px] text-[#a1a1aa] self-center">Draw Paper box first</span>
+            </div>
+        </div>
+
+        <!-- Result display -->
+        <div id="agentMeasureResult" class="hidden bg-[#141414] border border-[#262626] rounded-lg p-3 space-y-2">
+            <div class="flex items-center gap-3">
+                <span id="agentSwatchChip" class="w-10 h-10 rounded-lg border border-[#333333] inline-block shrink-0"></span>
+                <div>
+                    <div id="agentHex" class="text-sm font-mono font-bold text-white"></div>
+                    <div id="agentLabDisplay" class="text-[11px] text-[#a1a1aa]"></div>
+                </div>
+                <div class="ml-auto text-right">
+                    <div id="agentRefCode" class="text-base font-black font-mono text-[#a3e635]"></div>
+                    <div class="text-[10px] text-[#71717a]">Your REF code</div>
+                </div>
+            </div>
+            <button onclick="sendRefToChat()" class="btn-lime w-full text-xs py-2">
+                Find my match →
+            </button>
         </div>
     </div>
 
@@ -26,22 +69,25 @@
             <div class="bg-[#141414] border border-[#262626] text-white rounded-2xl rounded-tl-sm px-4 py-3 text-sm max-w-lg space-y-2">
                 <p>Hello! I match foundation using physical optical measurements rather than subjective shade names.</p>
                 <p class="text-xs text-[#a1a1aa]">
-                    Try: <span class="font-mono bg-[#000000] text-[#a3e635] px-1.5 py-0.5 rounded cursor-pointer border border-[#262626]" onclick="setInput('My shade is REF-7K2Q, find me a match under $30')">"My shade is REF-7K2Q, find me a match under $30"</span>
+                    Use the 📷 button to upload a swatch photo and draw your measurement boxes, or paste a REF code if you already have one.
                 </p>
+                {% if is_mock %}
+                <p class="text-[10px] text-yellow-400 font-mono bg-[#1a1500] border border-[#333300] rounded px-2 py-1">⚠ MOCK PAYPAL — no real payments</p>
+                {% endif %}
             </div>
         </div>
     </div>
 
     <!-- Input Form -->
     <form id="chatForm" class="flex gap-2 items-center">
-        <input type="file" id="agentFileInput" class="hidden" accept="image/*">
-        <label for="agentFileInput" id="cameraBtn" title="Upload Swatch Photo" class="btn-outline p-2.5 flex items-center justify-center text-white cursor-pointer select-none">
+        <button type="button" id="cameraBtn" onclick="openMeasureDrawer()" title="Upload Swatch Photo"
+            class="btn-outline p-2.5 flex items-center justify-center text-white cursor-pointer select-none">
             📷
-        </label>
-        <input 
-            type="text" 
-            id="userInput" 
-            placeholder="Type a message or upload swatch (e.g. REF-7K2Q)..." 
+        </button>
+        <input
+            type="text"
+            id="userInput"
+            placeholder="Type a message or upload swatch with 📷..."
             class="flex-1 bg-[#0d0d0d] border border-[#262626] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#a3e635]"
             autocomplete="off"
         >
@@ -53,5 +99,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/boxdraw.js"></script>
 <script src="/static/js/agent.js"></script>
 {% endblock %}
