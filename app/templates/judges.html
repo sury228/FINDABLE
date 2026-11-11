@@ -1,191 +1,137 @@
 {% extends "base.html" %}
 
-{% block title %}Findable — 3-Minute Evaluation Flow{% endblock %}
+{% block title %}Findable — Physical Shade Data for AI Agents via PayPal{% endblock %}
 
 {% block content %}
 <div class="space-y-10 max-w-6xl mx-auto py-8 px-4">
     <!-- Premium Hero Heading -->
     <div class="text-center space-y-3 pt-2">
-        <div class="inline-flex items-center space-x-2 bg-[#141414] border border-[#262626] rounded-full px-3 py-1 mb-2">
-            <span class="w-2 h-2 rounded-full bg-[#a3e635] animate-pulse"></span>
-            <span class="text-[11px] font-mono text-[#a3e635] uppercase tracking-wider font-semibold">PayPal Hackathon — 3-Minute Evaluation</span>
-        </div>
         <h1 class="text-4xl md:text-5xl font-black tracking-tight text-white">
             Find your shades here<span class="text-[#a3e635]">.</span>
         </h1>
-        <p class="text-[#a1a1aa] text-sm md:text-base max-w-2xl mx-auto">
-            From physical swatch photography and lighting correction to mathematical CIEDE2000 matching and server-authoritative PayPal Orders v2 checkout.
+        <p class="text-[#a1a1aa] text-sm md:text-base max-w-xl mx-auto">
+            From physical swatch photos to mathematical CIELAB matching and PayPal checkout.
         </p>
     </div>
 
     <!-- Two Primary Entry Points -->
     <div class="flex flex-col sm:flex-row gap-4 justify-center max-w-lg mx-auto">
         <a href="/studio" class="btn-lime flex-1 text-center py-4 text-sm font-bold block rounded-xl shadow-lg">
-            🧪 Step 1: Seller Studio
+            🧪 I'm a Seller → Seller Studio
         </a>
         <a href="/agent" class="btn-outline flex-1 text-center py-4 text-sm font-bold block rounded-xl shadow-lg">
-            🛍️ Step 2: Shopper Match & Buy
+            🛍️ I'm a Shopper → AI Agent
         </a>
     </div>
 
-    <!-- 4-Step Stepper Header -->
-    <div class="max-w-4xl mx-auto px-4">
+    <!-- Stepper Visualizer with Connected Circles & Arrows -->
+    <div class="max-w-3xl mx-auto px-4">
         <div class="flex items-center justify-between relative">
             <!-- Step 1 Circle -->
             <div class="flex flex-col items-center space-y-2 z-10">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-sm md:text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
+                <div class="w-12 h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
                     01
                 </div>
-                <span class="text-[10px] md:text-[11px] font-mono font-bold uppercase tracking-wider text-white">Studio</span>
+                <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-white">Studio</span>
             </div>
 
-            <!-- Arrow 1 -->
-            <div class="flex-1 flex items-center justify-center px-2 relative">
+            <!-- Connecting Arrow 1 -->
+            <div class="flex-1 flex items-center justify-center px-4 relative">
                 <div class="w-full border-t border-dashed border-[#333333]"></div>
-                <span class="absolute bg-[#000000] px-1 text-[#a3e635] text-sm font-bold">&rarr;</span>
+                <span class="absolute bg-[#000000] px-2 text-[#a3e635] text-base font-bold">&rarr;</span>
             </div>
 
             <!-- Step 2 Circle -->
             <div class="flex flex-col items-center space-y-2 z-10">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-sm md:text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
+                <div class="w-12 h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
                     02
                 </div>
-                <span class="text-[10px] md:text-[11px] font-mono font-bold uppercase tracking-wider text-white">Match</span>
+                <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-white">AI Agent</span>
             </div>
 
-            <!-- Arrow 2 -->
-            <div class="flex-1 flex items-center justify-center px-2 relative">
+            <!-- Connecting Arrow 2 -->
+            <div class="flex-1 flex items-center justify-center px-4 relative">
                 <div class="w-full border-t border-dashed border-[#333333]"></div>
-                <span class="absolute bg-[#000000] px-1 text-[#a3e635] text-sm font-bold">&rarr;</span>
+                <span class="absolute bg-[#000000] px-2 text-[#a3e635] text-base font-bold">&rarr;</span>
             </div>
 
             <!-- Step 3 Circle -->
             <div class="flex flex-col items-center space-y-2 z-10">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-sm md:text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
+                <div class="w-12 h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
                     03
                 </div>
-                <span class="text-[10px] md:text-[11px] font-mono font-bold uppercase tracking-wider text-white">PayPal</span>
-            </div>
-
-            <!-- Arrow 3 -->
-            <div class="flex-1 flex items-center justify-center px-2 relative">
-                <div class="w-full border-t border-dashed border-[#333333]"></div>
-                <span class="absolute bg-[#000000] px-1 text-[#a3e635] text-sm font-bold">&rarr;</span>
-            </div>
-
-            <!-- Step 4 Circle -->
-            <div class="flex flex-col items-center space-y-2 z-10">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0a0a0a] border-2 border-[#a3e635] text-[#a3e635] font-mono font-black text-sm md:text-base flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.2)]">
-                    04
-                </div>
-                <span class="text-[10px] md:text-[11px] font-mono font-bold uppercase tracking-wider text-white">Audit</span>
+                <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-white">Dashboard</span>
             </div>
         </div>
     </div>
 
-    <!-- 4 Numbered Step Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-        <!-- STEP 1 CARD -->
-        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-5 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-mono font-bold uppercase tracking-widest text-[#a3e635] bg-[#141414] px-2.5 py-1 rounded border border-[#262626]">
-                        Step 01 &bull; Seller Studio
-                    </span>
-                    <span class="text-[#71717a] text-xs font-mono">Measure &bull; Sign</span>
+    <!-- 3 Clean Action Workflow Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+        <!-- CARD 1: SELLER STUDIO -->
+        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-6 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
+                        Seller Studio
+                    </h3>
+                    <p class="text-xs text-[#a1a1aa] leading-relaxed">
+                        Upload a phone swatch photo. The pipeline cancels lighting bias, extracts precise CIELAB coordinates, and signs deterministic Shade Passports with HMAC-SHA256.
+                    </p>
                 </div>
-                <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
-                    1. Measure Swatch &amp; Publish Shade
-                </h3>
-                <p class="text-xs text-[#a1a1aa] leading-relaxed">
-                    Open <strong class="text-white">Seller Studio</strong>, upload a foundation bottle photo, sample the swatch + white card with draggable bounding boxes. The pipeline cancels lighting bias, extracts physical CIELAB coordinates, and saves the shade into the live catalog with an HMAC-SHA256 signature.
-                </p>
             </div>
-            <div class="pt-3 border-t border-[#1a1a1a]">
+
+            <div class="pt-4 border-t border-[#1a1a1a]">
                 <a href="/studio" class="btn-lime w-full text-center py-2.5 text-xs font-bold block rounded-lg">
-                    Open Seller Studio &rarr;
+                    Open Studio &rarr;
                 </a>
             </div>
         </div>
 
-        <!-- STEP 2 CARD -->
-        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-5 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-mono font-bold uppercase tracking-widest text-[#a3e635] bg-[#141414] px-2.5 py-1 rounded border border-[#262626]">
-                        Step 02 &bull; Shopper Matching
-                    </span>
-                    <span class="text-[#71717a] text-xs font-mono">CIEDE2000 &bull; Top 5</span>
+        <!-- CARD 2: AI SHOPPING AGENT -->
+        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-6 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
+                        AI Shopping Agent
+                    </h3>
+                    <p class="text-xs text-[#a1a1aa] leading-relaxed">
+                        AI agent evaluates passports using CIEDE2000 optical distance (&Delta;E). Finds the closest skin tone match and initializes a server-authoritative PayPal Orders v2 checkout.
+                    </p>
                 </div>
-                <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
-                    2. Upload Face Photo &amp; Match
-                </h3>
-                <p class="text-xs text-[#a1a1aa] leading-relaxed">
-                    Open <strong class="text-white">Shopper / Agent</strong>, upload a face photo (or select a pre-calibrated reference), sample your cheek shade, and view the top-5 matches ranked by honest CIEDE2000 &Delta;E optical distances (e.g. &Delta;E 1.2 imperceptible, &Delta;E 2.1 slight mismatch) &mdash; never deceptive "99% match" percentages.
-                </p>
             </div>
-            <div class="pt-3 border-t border-[#1a1a1a]">
+
+            <div class="pt-4 border-t border-[#1a1a1a]">
                 <a href="/agent" class="btn-lime w-full text-center py-2.5 text-xs font-bold block rounded-lg">
-                    Open Shopper Matcher &rarr;
+                    Open Agent Chat &rarr;
                 </a>
             </div>
         </div>
 
-        <!-- STEP 3 CARD -->
-        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-5 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-mono font-bold uppercase tracking-widest text-[#a3e635] bg-[#141414] px-2.5 py-1 rounded border border-[#262626]">
-                        Step 03 &bull; Checkout Approval
-                    </span>
-                    <span class="text-[#71717a] text-xs font-mono">Orders v2 &bull; Custom ID</span>
+        <!-- CARD 3: SELLER DASHBOARD -->
+        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-6 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
+                        Seller Dashboard
+                    </h3>
+                    <p class="text-xs text-[#a1a1aa] leading-relaxed">
+                        Approved PayPal payments trigger cryptographically verified webhooks streaming live orders, passport bundle hashes, and telemetry into AG Grid.
+                    </p>
                 </div>
-                <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
-                    3. Buy with PayPal Sandbox
-                </h3>
-                <p class="text-xs text-[#a1a1aa] leading-relaxed">
-                    Click <strong class="text-white">"Buy with PayPal"</strong> on the top match. The AI prepares the order with server-authoritative pricing and binds the passport bundle hash into <code class="text-[#a3e635] font-mono">custom_id</code>. Log into PayPal Sandbox, approve payment, and get redirected to the verified confirmation page.
-                </p>
             </div>
-            <div class="pt-3 border-t border-[#1a1a1a]">
-                <a href="/shop/shp_aurora" class="btn-lime w-full text-center py-2.5 text-xs font-bold block rounded-lg">
-                    Open Storefront &rarr;
-                </a>
-            </div>
-        </div>
 
-        <!-- STEP 4 CARD -->
-        <div class="group bg-[#0a0a0a] border border-[#262626] hover:border-[#a3e635] transition-all duration-300 rounded-2xl p-6 flex flex-col justify-between space-y-5 shadow-xl hover:shadow-[0_0_30px_rgba(163,230,53,0.05)]">
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-mono font-bold uppercase tracking-widest text-[#a3e635] bg-[#141414] px-2.5 py-1 rounded border border-[#262626]">
-                        Step 04 &bull; Dashboard Audit
-                    </span>
-                    <span class="text-[#71717a] text-xs font-mono">AG Grid &bull; Telemetry</span>
-                </div>
-                <h3 class="text-lg font-bold text-white group-hover:text-[#a3e635] transition">
-                    4. Inspect Telemetry &amp; Verification
-                </h3>
-                <p class="text-xs text-[#a1a1aa] leading-relaxed">
-                    Open <strong class="text-white">Seller Dashboard</strong> to inspect captured orders in AG Grid, check cryptographic Shade Passport verification, and review the live persistent PayPal REST API audit log (<code class="text-[#a3e635] font-mono">PayPalLog</code>) recording Orders v2, captures, and webhooks.
-                </p>
-            </div>
-            <div class="pt-3 border-t border-[#1a1a1a]">
+            <div class="pt-4 border-t border-[#1a1a1a]">
                 <a href="/dashboard" class="btn-lime w-full text-center py-2.5 text-xs font-bold block rounded-lg">
-                    Open Live Dashboard &rarr;
+                    View Dashboard &rarr;
                 </a>
             </div>
         </div>
     </div>
 
-    <!-- Quick Footer Action & Demo Reset -->
-    <div class="pt-8 border-t border-[#1f1f1f] flex flex-col sm:flex-row justify-between items-center text-xs text-[#71717a] gap-4">
-        <div class="flex items-center space-x-2">
-            <span class="w-2 h-2 rounded-full bg-[#a3e635]"></span>
-            <span>All 4 stages run live against real SQLite DB and PayPal Sandbox.</span>
-        </div>
+    <!-- Quick Footer Action -->
+    <div class="pt-8 border-t border-[#1f1f1f] flex justify-end text-xs text-[#71717a]">
         <button onclick="resetDemo()" id="resetBtn" class="text-xs text-[#71717a] hover:text-[#a3e635] transition underline">
-            Reset Demo Data to Initial State
+            Reset Demo Data
         </button>
     </div>
 </div>
@@ -207,7 +153,7 @@ async function resetDemo() {
         alert('Reset error: ' + e);
     } finally {
         btn.disabled = false;
-        btn.innerText = 'Reset Demo Data to Initial State';
+        btn.innerText = 'Reset Demo Data';
     }
 }
 </script>
