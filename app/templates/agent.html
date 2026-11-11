@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}AI Shopping Agent — Findable{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl mx-auto">
+    <!-- Chat Header -->
+    <div class="flex justify-between items-center border-b border-[#262626] pb-3">
+        <div>
+            <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                <span>Findable Shopper Agent</span>
+                <span class="text-xs bg-[#141414] text-[#a3e635] font-mono px-2 py-0.5 rounded border border-[#262626]">
+                    MCP Enabled
+                </span>
+            </h1>
+            <p class="text-xs text-[#a1a1aa] mt-0.5">
+                Matches skin tone to Shade Passports via CIEDE2000 ΔE color distance.
+            </p>
+        </div>
+
+        <button id="toggleTelemetryBtn" class="btn-outline text-xs py-1 px-3 flex items-center gap-1.5">
+            <span>⚙️ Behind the Scenes</span>
+            <span id="telemetryBadge" class="w-2 h-2 rounded-full bg-[#a3e635]"></span>
+        </button>
+    </div>
+
+    <!-- Telemetry Drawer -->
+    <div id="telemetryPanel" class="hidden bg-[#0a0a0a] text-white p-4 rounded-xl text-xs font-mono space-y-2 border border-[#262626]">
+        <div class="flex justify-between items-center text-[#71717a] border-b border-[#1f1f1f] pb-1.5">
+            <span class="font-bold text-[#a3e635] uppercase tracking-wider">Live Agent Telemetry</span>
+            <span class="text-[10px]">Server-Authoritative Pricing</span>
+        </div>
+        <div id="telemetryLog" class="h-28 overflow-y-auto space-y-1 text-[#a1a1aa]">
+            <div class="text-[#71717a]">[System Active] FastMCP server ready at /mcp.</div>
+        </div>
+    </div>
+
+    <!-- Messages Container -->
+    <div id="chatContainer" class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-4 min-h-[460px] max-h-[560px] overflow-y-auto space-y-4">
+        <!-- Agent Initial Greeting -->
+        <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-full bg-[#a3e635] text-black font-black flex items-center justify-center text-xs shrink-0">
+                AI
+            </div>
+            <div class="bg-[#141414] border border-[#262626] text-white rounded-2xl rounded-tl-sm px-4 py-3 text-sm max-w-lg space-y-2">
+                <p>Hello! I match foundation using physical optical measurements rather than subjective shade names.</p>
+                <p class="text-xs text-[#a1a1aa]">
+                    Try: <span class="font-mono bg-[#000000] text-[#a3e635] px-1.5 py-0.5 rounded cursor-pointer border border-[#262626]" onclick="setInput('My shade is REF-7K2Q, find me a match under $30')">"My shade is REF-7K2Q, find me a match under $30"</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Form -->
+    <form id="chatForm" class="flex gap-2 items-center">
+        <input type="file" id="agentFileInput" class="hidden" accept="image/*">
+        <label for="agentFileInput" id="cameraBtn" title="Upload Swatch Photo" class="btn-outline p-2.5 flex items-center justify-center text-white cursor-pointer select-none">
+            📷
+        </label>
+        <input 
+            type="text" 
+            id="userInput" 
+            placeholder="Type a message or upload swatch (e.g. REF-7K2Q)..." 
+            class="flex-1 bg-[#0d0d0d] border border-[#262626] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#a3e635]"
+            autocomplete="off"
+        >
+        <button type="submit" class="btn-lime">
+            Send
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/agent.js"></script>
+{% endblock %}

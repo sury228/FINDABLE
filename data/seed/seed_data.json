@@ -1,0 +1,296 @@
+{
+  "shop": {
+    "id": "shop_priya_beauty",
+    "name": "Priya's Clean Beauty",
+    "payee_email": "priya-seller@findable.demo"
+  },
+  "buyer_references": [
+    {
+      "id": "REF-7K2Q",
+      "L": 62.4,
+      "a": 13.9,
+      "b": 24.1,
+      "source": "demo",
+      "note": "Medium tan, neutral undertone → matches Honey 04"
+    },
+    {
+      "id": "REF-DEMO",
+      "L": 76.0,
+      "a": 9.4,
+      "b": 20.1,
+      "source": "demo",
+      "note": "Light, neutral undertone → matches Sand 03"
+    },
+    {
+      "id": "REF-FAIR",
+      "L": 89.2,
+      "a": 5.1,
+      "b": 11.2,
+      "source": "demo",
+      "note": "Very fair, warm undertone → matches Almond 01"
+    },
+    {
+      "id": "REF-LITE",
+      "L": 82.1,
+      "a": 7.8,
+      "b": 16.4,
+      "source": "demo",
+      "note": "Light warm → matches Ivory 02"
+    },
+    {
+      "id": "REF-WARM",
+      "L": 55.6,
+      "a": 15.8,
+      "b": 26.2,
+      "source": "demo",
+      "note": "Medium deep warm → matches Amber 05"
+    },
+    {
+      "id": "REF-DEEP",
+      "L": 42.1,
+      "a": 16.9,
+      "b": 25.4,
+      "source": "demo",
+      "note": "Deep warm → matches Praline 07"
+    },
+    {
+      "id": "REF-RICH",
+      "L": 29.5,
+      "a": 15.1,
+      "b": 20.3,
+      "source": "demo",
+      "note": "Rich cool → matches Cacao 09"
+    },
+    {
+      "id": "REF-DARK",
+      "L": 18.6,
+      "a": 12.3,
+      "b": 14.8,
+      "source": "demo",
+      "note": "Very deep cool → matches Ebony 11"
+    },
+    {
+      "id": "REF-COOL",
+      "L": 35.8,
+      "a": 16.2,
+      "b": 22.9,
+      "source": "demo",
+      "note": "Deep cool → matches Chestnut 08"
+    },
+    {
+      "id": "REF-CARA",
+      "L": 48.2,
+      "a": 17.5,
+      "b": 27.8,
+      "source": "demo",
+      "note": "Medium deep neutral → matches Caramel 06"
+    }
+  ],
+  "products": [
+    {
+      "id": "prd_serum_foundation",
+      "name": "Featherweight Serum Foundation",
+      "category": "foundation",
+      "price_usd": 28.00,
+      "finish": "natural satin",
+      "coverage": "medium buildable",
+      "description": "Breathable serum foundation infused with squalane and barrier ceramides. Calibrated across 12 measured shades.",
+      "stock": 120,
+      "shades": [
+        {
+          "id": "shd_almond01",
+          "shade_name": "Almond 01",
+          "hex": "#F4E2D3",
+          "L": 89.2,
+          "a": 5.1,
+          "b": 11.2,
+          "chroma": 12.3,
+          "hue_deg": 65.5,
+          "ita_deg": 61.4,
+          "depth": "very light",
+          "undertone": "warm",
+          "confidence": 96,
+          "passport_hash": "sha256:a1b2c3d4e5f601",
+          "passport_sig": "hmac-sha256:0192837465"
+        },
+        {
+          "id": "shd_ivory02",
+          "shade_name": "Ivory 02",
+          "hex": "#E9D0B8",
+          "L": 82.1,
+          "a": 7.8,
+          "b": 16.4,
+          "chroma": 18.2,
+          "hue_deg": 64.5,
+          "ita_deg": 52.1,
+          "depth": "light",
+          "undertone": "warm",
+          "confidence": 94,
+          "passport_hash": "sha256:a1b2c3d4e5f602",
+          "passport_sig": "hmac-sha256:0192837466"
+        },
+        {
+          "id": "shd_sand03",
+          "shade_name": "Sand 03",
+          "hex": "#DCBEA1",
+          "L": 76.0,
+          "a": 9.4,
+          "b": 20.1,
+          "chroma": 22.2,
+          "hue_deg": 64.9,
+          "ita_deg": 44.8,
+          "depth": "light",
+          "undertone": "neutral",
+          "confidence": 95,
+          "passport_hash": "sha256:a1b2c3d4e5f603",
+          "passport_sig": "hmac-sha256:0192837467"
+        },
+        {
+          "id": "shd_honey04",
+          "shade_name": "Honey 04",
+          "hex": "#C08C6C",
+          "L": 62.4,
+          "a": 13.9,
+          "b": 24.1,
+          "chroma": 27.8,
+          "hue_deg": 60.0,
+          "ita_deg": 27.2,
+          "depth": "tan",
+          "undertone": "neutral",
+          "confidence": 91,
+          "passport_hash": "sha256:a1b2c3d4e5f604",
+          "passport_sig": "hmac-sha256:0192837468"
+        },
+        {
+          "id": "shd_amber05",
+          "shade_name": "Amber 05",
+          "hex": "#B17A55",
+          "L": 55.6,
+          "a": 15.8,
+          "b": 26.2,
+          "chroma": 30.6,
+          "hue_deg": 58.9,
+          "ita_deg": 12.1,
+          "depth": "tan",
+          "undertone": "neutral",
+          "confidence": 93,
+          "passport_hash": "sha256:a1b2c3d4e5f605",
+          "passport_sig": "hmac-sha256:0192837469"
+        },
+        {
+          "id": "shd_caramel06",
+          "shade_name": "Caramel 06",
+          "hex": "#9F6744",
+          "L": 48.2,
+          "a": 17.5,
+          "b": 27.8,
+          "chroma": 32.8,
+          "hue_deg": 57.8,
+          "ita_deg": -3.7,
+          "depth": "deep",
+          "undertone": "neutral",
+          "confidence": 90,
+          "passport_hash": "sha256:a1b2c3d4e5f606",
+          "passport_sig": "hmac-sha256:0192837470"
+        },
+        {
+          "id": "shd_praline07",
+          "shade_name": "Praline 07",
+          "hex": "#8C5635",
+          "L": 42.1,
+          "a": 16.9,
+          "b": 25.4,
+          "chroma": 30.5,
+          "hue_deg": 56.3,
+          "ita_deg": -17.3,
+          "depth": "deep",
+          "undertone": "warm",
+          "confidence": 92,
+          "passport_hash": "sha256:a1b2c3d4e5f607",
+          "passport_sig": "hmac-sha256:0192837471"
+        },
+        {
+          "id": "shd_chestnut08",
+          "shade_name": "Chestnut 08",
+          "hex": "#784528",
+          "L": 35.8,
+          "a": 16.2,
+          "b": 22.9,
+          "chroma": 28.1,
+          "hue_deg": 54.7,
+          "ita_deg": -31.8,
+          "depth": "rich",
+          "undertone": "cool",
+          "confidence": 89,
+          "passport_hash": "sha256:a1b2c3d4e5f608",
+          "passport_sig": "hmac-sha256:0192837472"
+        },
+        {
+          "id": "shd_cacao09",
+          "shade_name": "Cacao 09",
+          "hex": "#63351C",
+          "L": 29.5,
+          "a": 15.1,
+          "b": 20.3,
+          "chroma": 25.3,
+          "hue_deg": 53.4,
+          "ita_deg": -45.3,
+          "depth": "rich",
+          "undertone": "cool",
+          "confidence": 91,
+          "passport_hash": "sha256:a1b2c3d4e5f609",
+          "passport_sig": "hmac-sha256:0192837473"
+        },
+        {
+          "id": "shd_espresso10",
+          "shade_name": "Espresso 10",
+          "hex": "#4F2712",
+          "L": 23.9,
+          "a": 13.8,
+          "b": 17.5,
+          "chroma": 22.3,
+          "hue_deg": 51.8,
+          "ita_deg": -56.2,
+          "depth": "rich",
+          "undertone": "cool",
+          "confidence": 90,
+          "passport_hash": "sha256:a1b2c3d4e5f610",
+          "passport_sig": "hmac-sha256:0192837474"
+        },
+        {
+          "id": "shd_ebony11",
+          "shade_name": "Ebony 11",
+          "hex": "#3C1D0D",
+          "L": 18.6,
+          "a": 12.3,
+          "b": 14.8,
+          "chroma": 19.2,
+          "hue_deg": 50.3,
+          "ita_deg": -64.7,
+          "depth": "rich",
+          "undertone": "cool",
+          "confidence": 88,
+          "passport_hash": "sha256:a1b2c3d4e5f611",
+          "passport_sig": "hmac-sha256:0192837475"
+        },
+        {
+          "id": "shd_obsidian12",
+          "shade_name": "Obsidian 12",
+          "hex": "#2B1408",
+          "L": 14.1,
+          "a": 10.8,
+          "b": 11.9,
+          "chroma": 16.1,
+          "hue_deg": 47.8,
+          "ita_deg": -71.7,
+          "depth": "rich",
+          "undertone": "cool",
+          "confidence": 87,
+          "passport_hash": "sha256:a1b2c3d4e5f612",
+          "passport_sig": "hmac-sha256:0192837476"
+        }
+      ]
+    }
+  ]
+}
+

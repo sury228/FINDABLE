@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Seller Dashboard — Findable{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#262626] pb-4">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Seller Operations Dashboard</h1>
+            <p class="text-[#a1a1aa] text-xs mt-0.5">Real-time incoming orders from autonomous AI agents via verified PayPal webhooks.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs bg-[#141414] text-[#a3e635] font-mono px-2.5 py-1 rounded border border-[#262626] flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-[#a3e635] animate-pulse"></span>
+                Webhook Listener: Active
+            </span>
+        </div>
+    </div>
+
+    <!-- Incoming Orders Grid -->
+    <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
+        <div class="flex justify-between items-center">
+            <h2 class="text-base font-bold text-white">Verified Commerce Orders</h2>
+            <span class="text-xs text-[#71717a]">Captured via PayPal Orders v2 with Shade Passport Bundle hashes</span>
+        </div>
+        <div id="ordersGrid" class="ag-theme-alpine w-full h-64 rounded-lg border border-[#262626]"></div>
+    </div>
+
+    <!-- Dual Split: PayPal API Call Log & Shade Promise Claims -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- PayPal Call Telemetry -->
+        <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
+            <div class="flex justify-between items-center">
+                <h3 class="text-sm font-bold text-white">PayPal REST Telemetry</h3>
+                <span class="text-[11px] font-mono text-[#71717a]">Live Audit Log</span>
+            </div>
+            <div class="bg-[#050505] border border-[#262626] rounded-lg p-3 text-xs font-mono text-[#a1a1aa] max-h-60 overflow-y-auto space-y-1.5">
+                {% if paypal_logs %}
+                    {% for log in paypal_logs %}
+                        <div class="flex justify-between items-center border-b border-[#1a1a1a] pb-1">
+                            <span class="text-[#a3e635] font-bold">{{ log.method }}</span>
+                            <span class="text-white truncate w-40">{{ log.endpoint }}</span>
+                            <span class="text-white">{{ log.status }}</span>
+                            <span class="text-[10px] text-[#71717a] font-mono">id: {{ log.debug_id }}</span>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-[#71717a] py-4 text-center">No recent calls recorded. Check out an order to stream telemetry.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Shade Promise Claims -->
+        <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
+            <div class="flex justify-between items-center">
+                <h3 class="text-sm font-bold text-white">Shade Promise Automated Claims</h3>
+                <span class="text-[11px] font-mono font-semibold text-[#a3e635] bg-[#141414] px-2 py-0.5 rounded border border-[#262626]">Instant Resolution</span>
+            </div>
+            <div class="border border-[#262626] rounded-lg overflow-hidden bg-[#050505]">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-[#141414] text-[#a1a1aa] border-b border-[#262626]">
+                        <tr>
+                            <th class="p-2.5">Claim ID</th>
+                            <th class="p-2.5">Order ID</th>
+                            <th class="p-2.5">Measured ΔE</th>
+                            <th class="p-2.5">Verdict</th>
+                            <th class="p-2.5">Refund ID</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-[#1a1a1a] text-white">
+                        {% if claims %}
+                            {% for c in claims %}
+                                <tr>
+                                    <td class="p-2.5 font-mono text-[#a1a1aa]">{{ c.id }}</td>
+                                    <td class="p-2.5 font-mono">{{ c.order_id }}</td>
+                                    <td class="p-2.5 font-bold text-[#a3e635]">ΔE {{ c.delta_e }}</td>
+                                    <td class="p-2.5">
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold {% if c.verdict == 'refund' %}bg-[#141414] text-[#a3e635] border border-[#262626]{% else %}bg-[#141414] text-white{% endif %}">
+                                            {{ c.verdict | upper }}
+                                        </span>
+                                    </td>
+                                    <td class="p-2.5 font-mono text-[10px] text-[#71717a]">{{ c.refund_id or '—' }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="p-4 text-center text-[#71717a]">No dispute claims filed.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.ordersData = [
+        {% for o in orders %}
+        {
+            order_id: "{{ o.id }}",
+            paypal_order_id: "{{ o.paypal_order_id or 'MOCK-ORD' }}",
+            channel: "{{ o.channel }}",
+            agent: "{{ o.agent_name or 'web' }}",
+            status: "{{ o.status }}",
+            total: "${{ '%.2f' | format(o.total) }}",
+            capture_id: "{{ o.capture_id or 'Pending' }}",
+            passport_hash: "{{ (o.passport_bundle_hash or '')[:12] }}..."
+        },
+        {% endfor %}
+    ];
+</script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

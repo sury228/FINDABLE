@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Seller Studio — Findable{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#262626] pb-4">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Seller Studio: Measure &amp; Match</h1>
+            <p class="text-[#a1a1aa] text-xs mt-0.5">
+                Upload a phone swatch photo, extract scientific CIELAB coordinates, and match against catalog shades.
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-[#71717a] font-mono">Quick Test Samples:</span>
+            <button onclick="testQuickSample('fair')" class="btn-outline text-xs py-1 px-2.5">
+                Fair
+            </button>
+            <button onclick="testQuickSample('honey')" class="btn-outline text-xs py-1 px-2.5">
+                Honey
+            </button>
+            <button onclick="testQuickSample('deep')" class="btn-outline text-xs py-1 px-2.5">
+                Deep
+            </button>
+        </div>
+    </div>
+
+    <!-- Upload and Measurement Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Photo Upload Box -->
+        <div class="lg:col-span-7 bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-4">
+            <div class="flex justify-between items-center text-xs text-[#a1a1aa]">
+                <span class="font-bold text-white uppercase text-[11px] tracking-wider">Swatch Photo Upload</span>
+                <span id="uploadStatusBadge" class="font-mono text-[#a3e635] bg-[#141414] px-2 py-0.5 rounded border border-[#262626]">Ready</span>
+            </div>
+
+            <!-- Hidden File Input -->
+            <input type="file" id="studioFileInput" class="hidden" accept="image/*">
+
+            <!-- Upload Area / Dropzone using native label for 100% reliable click -->
+            <label for="studioFileInput" id="dropZone" class="relative bg-[#050505] border-2 border-dashed border-[#262626] hover:border-[#a3e635] transition rounded-xl p-6 flex flex-col items-center justify-center min-h-[300px] cursor-pointer text-center block">
+                <div id="placeholderContent" class="space-y-3">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-[#141414] border border-[#262626] flex items-center justify-center text-[#a3e635] text-2xl">
+                        📷
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-white">Click or drag &amp; drop swatch photo here</p>
+                        <p class="text-xs text-[#71717a] mt-1">Supports any phone camera photo (PNG, JPG, WEBP)</p>
+                    </div>
+                    <span class="btn-lime text-xs py-1.5 px-4 mt-2 inline-block">
+                        Choose Photo
+                    </span>
+                </div>
+
+                <!-- Live Preview when Image Selected -->
+                <div id="previewContainer" class="hidden w-full flex flex-col items-center space-y-3">
+                    <img id="imagePreview" class="max-h-[260px] rounded-lg border border-[#333333] shadow-md object-contain mx-auto" />
+                    <p class="text-[11px] text-[#a3e635] font-mono">Photo loaded &bull; Click to change</p>
+                </div>
+            </label>
+
+            <div class="grid grid-cols-3 gap-2 text-[11px] text-[#71717a] bg-[#141414] p-2.5 rounded-lg border border-[#262626] text-center">
+                <div>&bull; Natural lighting</div>
+                <div>&bull; No heavy filters</div>
+                <div>&bull; Automatic CIELAB extraction</div>
+            </div>
+        </div>
+
+        <!-- Real-Time CIELAB & AI Agent Link -->
+        <div class="lg:col-span-5 bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-4 flex flex-col justify-between">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xs font-mono uppercase tracking-wider text-[#71717a]">Calculated Color Science</h3>
+                    <span id="measuringSpinner" class="hidden text-xs text-[#a3e635] font-mono animate-pulse">Computing CIELAB...</span>
+                </div>
+
+                <!-- Swatch Color Chip Preview -->
+                <div class="border border-[#262626] rounded-xl p-4 bg-[#141414] space-y-3">
+                    <span class="text-xs font-semibold text-[#a1a1aa] block">Calibrated Swatch Profile</span>
+                    <div class="flex items-center gap-4">
+                        <div id="swatchColorChip" class="w-16 h-16 rounded-xl border border-dashed border-[#444444] shadow-inner bg-[#1a1a1a] flex items-center justify-center text-xl text-[#71717a] shrink-0">
+                            🎨
+                        </div>
+                        <div>
+                            <div id="hexDisplay" class="text-sm font-mono font-bold text-[#71717a]">Awaiting Upload...</div>
+                            <div id="depthUndertoneDisplay" class="text-xs text-[#71717a] mt-0.5">Upload a photo on the left to measure</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CIELAB Measurement Readout -->
+                <div class="bg-[#141414] border border-[#262626] rounded-xl p-4 space-y-2">
+                    <span class="text-[11px] text-[#71717a] uppercase font-mono tracking-wider">Physical Coordinates</span>
+                    <div class="grid grid-cols-3 gap-2 text-center pt-1">
+                        <div class="bg-[#0a0a0a] border border-[#262626] p-2 rounded-lg">
+                            <span class="text-[10px] text-[#71717a] block">Lightness (L*)</span>
+                            <span id="valL" class="text-base font-mono font-bold text-[#71717a]">--</span>
+                        </div>
+                        <div class="bg-[#0a0a0a] border border-[#262626] p-2 rounded-lg">
+                            <span class="text-[10px] text-[#71717a] block">Red-Green (a*)</span>
+                            <span id="valA" class="text-base font-mono font-bold text-[#71717a]">--</span>
+                        </div>
+                        <div class="bg-[#0a0a0a] border border-[#262626] p-2 rounded-lg">
+                            <span class="text-[10px] text-[#71717a] block">Yellow-Blue (b*)</span>
+                            <span id="valB" class="text-base font-mono font-bold text-[#71717a]">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Query Reference Box -->
+                <div class="border border-[#333333] rounded-xl p-3 bg-[#0a0a0a] flex items-center justify-between">
+                    <div>
+                        <span class="text-[10px] text-[#71717a] uppercase font-mono block">Query Reference Code</span>
+                        <span id="refCodeText" class="text-sm font-mono text-[#71717a]">No swatch measured yet</span>
+                    </div>
+                    <span class="text-[10px] text-[#71717a] font-mono bg-[#141414] px-2 py-1 rounded border border-[#262626]">In-Memory Query</span>
+                </div>
+            </div>
+
+            <!-- Big Direct Action Button to AI Agent -->
+            <div class="pt-2">
+                <a id="sendToAgentBtn" href="#" class="w-full text-center py-3 text-sm font-bold block rounded-xl bg-[#262626] text-[#71717a] cursor-not-allowed pointer-events-none transition shadow-lg">
+                    📷 Upload Photo to Enable Matching
+                </a>
+                <p class="text-[10px] text-[#71717a] text-center mt-2">
+                    Directly passes CIELAB values to agent without altering catalog database.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- AG Grid Table: Priya's Unaltered 12 Catalog Shades -->
+    <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
+        <div class="flex justify-between items-center">
+            <div>
+                <h3 class="text-base font-bold text-white">Priya's Clean Beauty — Fixed Catalog Shades</h3>
+                <p class="text-xs text-[#71717a]">These 12 foundation shades are immutable in the database. Customer swatches are matched against this benchmark.</p>
+            </div>
+            <span class="text-xs font-mono bg-[#141414] text-[#a3e635] px-2.5 py-1 rounded border border-[#262626]">
+                12 Calibrated Passports
+            </span>
+        </div>
+
+        <div id="shadesGrid" class="ag-theme-alpine w-full h-72 rounded-lg border border-[#262626]"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/studio.js"></script>
+{% endblock %}

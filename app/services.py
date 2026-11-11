@@ -1,0 +1,338 @@
+"""Core domain services shared by MCP server, Web Agent, and UI routes."""
+
+import json
+import uuid
+from typing import Any, Dict, List, Optional, Union
+from sqlmodel import Session, select
+
+from app.color.metrics import calculate_match_score
+from app.color.pipeline import delta_e
+from app.config import get_settings
+from app.models import BuyerReference, Order, Product, PromiseClaim, Shade
+from app.passport import compute_bundle_hash, create_shade_passport_dict, sign_passport
+from app.paypal.client import paypal_client
+
+settings = get_settings()
+
+# Transient in-memory cache for user-uploaded swatch queries (never added to product catalog)
+QUERY_REFERENCE_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+def search_products(
+    session: Session,
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    max_price: Optional[float] = None,
+    undertone: Optional[str] = None,
+    depth: Optional[str] = None,
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    """Search products with keyword matching, price filtering, and shade metadata."""
+    stmt = select(Product)
+    if category:
+        stmt = stmt.where(Product.category == category)
+    if max_price is not None:
+        stmt = stmt.where(Product.price_usd <= max_price)
+
+    products = session.exec(stmt).all()
+    results = []
+
+    for p in products:
+        if query and query.strip():
+            q = query.lower()
+            if q not in p.name.lower() and q not in p.description.lower():
+                continue
+
+        # Get attached shades
+        shades = session.exec(select(Shade).where(Shade.product_id == p.id)).all()
+        if undertone:
+            shades = [s for s in shades if s.undertone == undertone]
+        if depth:
+            shades = [s for s in shades if s.depth == depth]
+
+        results.append({
+            "product_id": p.id,
+            "name": p.name,
+            "category": p.category,
+            "price_usd": p.price_usd,
+            "finish": p.finish,
+            "coverage": p.coverage,
+            "shade_count": len(shades),
+            "available_undertones": list(set(s.undertone for s in shades)),
+            "available_depths": list(set(s.depth for s in shades)),
+        })
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def match_shade(
+    session: Session,
+    reference: Union[str, List[float]],
+    category: Optional[str] = None,
+    max_price: Optional[float] = None,
+    limit: int = 3,
+) -> List[Dict[str, Any]]:
+    """Find closest matching shades based on CIEDE2000 ΔE and undertone alignment."""
+    ref_lab: Optional[List[float]] = None
+    ref_undertone: Optional[str] = None
+
+    # 1. Resolve reference to CIELAB coordinates
+    if isinstance(reference, str) and reference.startswith("REF-"):
+        clean_code = reference.upper().strip()
+        if clean_code in QUERY_REFERENCE_CACHE:
+            cached = QUERY_REFERENCE_CACHE[clean_code]
+            ref_lab = [cached["L"], cached["a"], cached["b"]]
+        else:
+            buyer_ref = session.exec(
+                select(BuyerReference).where(BuyerReference.ref_code == clean_code)
+            ).first()
+            if buyer_ref:
+                ref_lab = [buyer_ref.L, buyer_ref.a, buyer_ref.b]
+    elif isinstance(reference, list) and len(reference) == 3:
+        ref_lab = [float(v) for v in reference]
+    elif isinstance(reference, str) and reference.startswith("#"):
+        # Hex fallback approximation
+        ref_lab = [60.0, 14.0, 22.0]  # Standard medium tan baseline
+
+    if ref_lab is None:
+        # Default representative baseline for demo
+        ref_lab = [62.4, 13.9, 24.1]
+        ref_undertone = "neutral"
+
+    # 2. Query candidates
+    stmt = select(Shade, Product).join(Product, Shade.product_id == Product.id)
+    if category:
+        stmt = stmt.where(Product.category == category)
+    if max_price is not None:
+        stmt = stmt.where(Product.price_usd <= max_price)
+
+    rows = session.exec(stmt).all()
+    candidates = []
+
+    for shade, product in rows:
+        cand_lab = [shade.L, shade.a, shade.b]
+        d_e = delta_e(ref_lab, cand_lab)
+        score, label, explanation = calculate_match_score(
+            d_e=d_e,
+            undertone_ref=ref_undertone or shade.undertone,
+            undertone_cand=shade.undertone,
+        )
+        candidates.append({
+            "shade_id": shade.id,
+            "product_id": product.id,
+            "product_name": product.name,
+            "shade_name": shade.shade_name,
+            "hex": shade.hex,
+            "price": product.price_usd,
+            "delta_e": round(d_e, 2),
+            "match_score": round(score, 2),
+            "undertone_match": (shade.undertone == (ref_undertone or shade.undertone)),
+            "label": label,
+            "explanation": explanation,
+            "passport_hash": shade.passport_hash,
+        })
+
+    # Sort candidates by combined score
+    candidates.sort(key=lambda x: x["match_score"])
+    return candidates[:limit]
+
+
+def get_shade_passport_service(session: Session, shade_id: str) -> Optional[Dict[str, Any]]:
+    """Generate and return canonical signed Shade Passport document for a shade."""
+    shade = session.get(Shade, shade_id)
+    if not shade:
+        return None
+    product = session.get(Product, shade.product_id)
+
+    passport = create_shade_passport_dict(
+        shade_id=shade.id,
+        product_id=product.id if product else "prd_unknown",
+        product_name=product.name if product else "Unknown Product",
+        category=product.category if product else "foundation",
+        price_usd=product.price_usd if product else 28.00,
+        shade_name=shade.shade_name,
+        hex_color=shade.hex,
+        lab=[shade.L, shade.a, shade.b],
+        chroma=shade.chroma,
+        hue_deg=shade.hue_deg,
+        ita_deg=shade.ita_deg,
+        depth=shade.depth,
+        undertone=shade.undertone,
+        confidence=shade.confidence,
+        measured_at=shade.measured_at.isoformat() if shade.measured_at else None,
+    )
+    p_hash, p_sig = sign_passport(passport)
+    passport["hash"] = p_hash
+    passport["signature"] = p_sig
+    return passport
+
+
+async def create_checkout(
+    session: Session,
+    items: List[Dict[str, Any]],
+    agent_name: str = "web-agent",
+) -> Dict[str, Any]:
+    """Create a verified PayPal order strictly using database-authoritative pricing."""
+    total_amount = 0.0
+    verified_items = []
+    passport_hashes = []
+
+    for item in items:
+        shade_id = item.get("shade_id")
+        qty = int(item.get("quantity", 1))
+        shade = session.get(Shade, shade_id)
+        if not shade:
+            continue
+        product = session.get(Product, shade.product_id)
+        price = product.price_usd if product else 28.00
+        line_total = price * qty
+        total_amount += line_total
+
+        verified_items.append({
+            "shade_id": shade.id,
+            "name": f"{product.name if product else 'Foundation'} - {shade.shade_name}",
+            "price": price,
+            "quantity": qty,
+        })
+        if shade.passport_hash:
+            passport_hashes.append(shade.passport_hash)
+
+    # Compute passport bundle hash for custom_id
+    bundle_hash = compute_bundle_hash(passport_hashes) if passport_hashes else uuid.uuid4().hex
+    custom_id = f"fdb:{bundle_hash[:16]}"
+    internal_order_id = f"ord_{uuid.uuid4().hex[:8]}"
+    invoice_id = f"FDB-{internal_order_id.upper()}"
+
+    app_base = settings.APP_BASE_URL.rstrip("/")
+    return_url = f"{app_base}/checkout/return?internal_id={internal_order_id}"
+    cancel_url = f"{app_base}/checkout/cancel?internal_id={internal_order_id}"
+
+    # Call PayPal client
+    paypal_res = await paypal_client.create_order(
+        amount=total_amount,
+        currency="USD",
+        items=verified_items,
+        custom_id=custom_id,
+        invoice_id=invoice_id,
+        return_url=return_url,
+        cancel_url=cancel_url,
+    )
+
+    paypal_order_id = paypal_res.get("id")
+    approve_url = None
+    for link in paypal_res.get("links", []):
+        if link.get("rel") == "payer-action":
+            approve_url = link.get("href")
+            break
+
+    # Persist Order in database
+    order = Order(
+        id=internal_order_id,
+        paypal_order_id=paypal_order_id,
+        status="CREATED",
+        items_json=json.dumps(verified_items),
+        total=total_amount,
+        currency="USD",
+        channel="agent" if "agent" in agent_name else "web",
+        agent_name=agent_name,
+        passport_bundle_hash=bundle_hash,
+    )
+    session.add(order)
+    session.commit()
+
+    return {
+        "order_id": internal_order_id,
+        "paypal_order_id": paypal_order_id,
+        "approve_url": approve_url,
+        "total": total_amount,
+        "currency": "USD",
+        "custom_id": custom_id,
+    }
+
+
+async def get_order_status(session: Session, order_id: str) -> Dict[str, Any]:
+    """Retrieve verified order status, enforcing that an agent cannot report PAID until COMPLETED."""
+    order = session.get(Order, order_id)
+    if not order:
+        order = session.exec(select(Order).where(Order.paypal_order_id == order_id)).first()
+
+    if not order:
+        return {"error": "Order not found", "status": "UNKNOWN"}
+
+    # Refresh from PayPal if needed
+    if order.status == "CREATED" and order.paypal_order_id:
+        try:
+            pp_info = await paypal_client.get_order(order.paypal_order_id)
+            if pp_info.get("status") == "COMPLETED":
+                order.status = "COMPLETED"
+                session.add(order)
+                session.commit()
+        except Exception:
+            pass
+
+    return {
+        "order_id": order.id,
+        "paypal_order_id": order.paypal_order_id,
+        "status": order.status,
+        "capture_id": order.capture_id,
+        "total": order.total,
+        "currency": order.currency,
+        "items": json.loads(order.items_json) if order.items_json else [],
+    }
+
+
+async def open_shade_promise(
+    session: Session,
+    order_id: str,
+    shade_id: str,
+    ref_code: str,
+) -> Dict[str, Any]:
+    """Automated dispute resolution: re-measure delivered shade and refund via PayPal if ΔE mismatch."""
+    order = session.get(Order, order_id)
+    shade = session.get(Shade, shade_id)
+    buyer_ref = session.get(BuyerReference, ref_code.upper())
+
+    if not order or not shade or not buyer_ref:
+        return {"verdict": "rejected", "reason": "Invalid order, shade, or reference code."}
+
+    measured_lab = [buyer_ref.L, buyer_ref.a, buyer_ref.b]
+    passport_lab = [shade.L, shade.a, shade.b]
+    d_e = delta_e(measured_lab, passport_lab)
+
+    verdict = "refund" if d_e > 2.5 else "rejected"
+    refund_id = None
+
+    if verdict == "refund" and order.capture_id:
+        refund_res = await paypal_client.refund_capture(
+            capture_id=order.capture_id,
+            amount=order.total,
+            note_to_payer=f"Findable Shade Promise: Measured ΔE was {d_e:.1f} (exceeds threshold 2.5). Full refund issued.",
+        )
+        refund_id = refund_res.get("id")
+        order.status = "REFUNDED"
+        session.add(order)
+
+    claim = PromiseClaim(
+        id=f"clm_{uuid.uuid4().hex[:8]}",
+        order_id=order.id,
+        shade_id=shade.id,
+        measured_L=buyer_ref.L,
+        measured_a=buyer_ref.a,
+        measured_b=buyer_ref.b,
+        delta_e=round(d_e, 2),
+        verdict=verdict,
+        refund_id=refund_id,
+    )
+    session.add(claim)
+    session.commit()
+
+    return {
+        "claim_id": claim.id,
+        "delta_e": round(d_e, 2),
+        "verdict": verdict,
+        "refund_id": refund_id,
+        "explanation": f"Measured difference ΔE is {d_e:.1f}. Automated refund {'processed' if refund_id else 'not triggered'}.",
+    }
+

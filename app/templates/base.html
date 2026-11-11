@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Findable — AI Shade Matching{% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        lime: {
+                            300: '#bef264',
+                            400: '#a3e635',
+                            500: '#84cc16',
+                        },
+                        dark: {
+                            900: '#000000',
+                            800: '#0d0d0d',
+                            700: '#141414',
+                            600: '#262626',
+                            500: '#333333',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- AG Grid Community CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-alpine.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-black text-white font-sans min-h-screen flex flex-col">
+    <!-- Streamlined Header -->
+    <header class="bg-black border-b border-[#262626] sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <a href="/judges" class="flex items-center space-x-2">
+                    <span class="w-8 h-8 rounded-lg bg-[#a3e635] text-black font-black flex items-center justify-center text-lg shadow-sm">Δ</span>
+                    <span class="text-xl font-bold tracking-tight text-white">Findable</span>
+                </a>
+            </div>
+
+            <nav class="flex items-center space-x-1 sm:space-x-3 text-sm font-medium">
+                <a href="/judges" class="px-3 py-1.5 rounded-lg text-white hover:text-[#a3e635] hover:bg-[#141414] transition">
+                    Judges Guide
+                </a>
+                <a href="/studio" class="px-3 py-1.5 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#141414] transition">
+                    Seller Studio
+                </a>
+                <a href="/agent" class="px-3 py-1.5 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#141414] transition">
+                    AI Shopping Agent
+                </a>
+                <a href="/dashboard" class="px-3 py-1.5 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#141414] transition">
+                    Dashboard
+                </a>
+                <a href="/measure" class="px-3 py-1.5 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#141414] transition">
+                    Measure Shade
+                </a>
+            </nav>
+
+            <div class="flex items-center space-x-2">
+                <span class="inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#141414] text-[#a3e635] border border-[#262626]">
+                    PayPal Sandbox
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Minimal Footer -->
+    <footer class="bg-black border-t border-[#262626] py-5 text-center text-xs text-[#71717a]">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+            <div>Findable &bull; Measured Shade Data for AI Agents</div>
+            <div class="space-x-4">
+                <a href="/mcp" class="hover:text-white">MCP Endpoint (/mcp)</a>
+                <a href="/health" class="hover:text-white">Health Check</a>
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
