@@ -510,16 +510,23 @@ async def api_measure(
 # ==============================================================================
 
 @app.post("/api/references")
+@app.post("/api/measure-reference")
 async def api_create_reference(
     payload: Dict[str, Any],
     session: Session = Depends(get_session),
 ):
-    """Create a BuyerReference from measured CIELAB values and return a REF-XXXXXX code."""
+    """Create a BuyerReference from measured CIELAB or RGB values and return a REF-XXXXXX code."""
     lab = payload.get("lab")
+    rgb = payload.get("rgb")
     hex_color = payload.get("hex")
 
+    if rgb and not lab:
+        lab = rgb_to_lab(rgb)
+        if not hex_color:
+            hex_color = f"#{int(rgb[0]):02X}{int(rgb[1]):02X}{int(rgb[2]):02X}"
+
     if not lab or len(lab) != 3:
-        raise HTTPException(status_code=400, detail="Lab values [L, a, b] are required.")
+        raise HTTPException(status_code=400, detail="Lab values [L, a, b] or rgb [r, g, b] are required.")
 
     L, a, b = float(lab[0]), float(lab[1]), float(lab[2])
     if not hex_color:
@@ -543,6 +550,7 @@ async def api_create_reference(
         "ref_code": ref_code,
         "hex": hex_color,
         "lab": [round(L, 2), round(a, 2), round(b, 2)],
+        "confidence": confidence,
     }
 
 

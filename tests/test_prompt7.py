@@ -77,3 +77,4 @@ def test_judges_page_4_step_evaluation_flow():
     assert "PayPal" in html
     assert "Dashboard" in html or "Audit" in html
     assert "Shade Promise" not in html
+

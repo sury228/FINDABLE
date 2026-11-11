@@ -21,6 +21,33 @@ engine = create_engine(
 def init_db() -> None:
     """Create all database tables and seed demo data if empty."""
     SQLModel.metadata.create_all(engine)
+
+    # Automatic schema migration for existing SQLite database files
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            # Check order table columns
+            try:
+                res = conn.execute(text("PRAGMA table_info('order')")).fetchall()
+                order_cols = [r[1] for r in res]
+                if order_cols and "invoice_id" not in order_cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN invoice_id VARCHAR'))
+                    conn.commit()
+            except Exception:
+                pass
+
+            # Check shade table columns
+            try:
+                res = conn.execute(text("PRAGMA table_info('shade')")).fetchall()
+                shade_cols = [r[1] for r in res]
+                if shade_cols and "source" not in shade_cols:
+                    conn.execute(text("ALTER TABLE shade ADD COLUMN source VARCHAR DEFAULT 'seed'"))
+                    conn.commit()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     with Session(engine) as session:
         seed_db(session)
 
