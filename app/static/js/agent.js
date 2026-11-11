@@ -10,10 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let history = [];
 
-    // Toggle Behind-the-Scenes telemetry drawer
-    toggleTelemetryBtn.addEventListener('click', () => {
-        telemetryPanel.classList.toggle('hidden');
-    });
+    // Toggle Behind-the-Scenes telemetry drawer if present
+    if (toggleTelemetryBtn && telemetryPanel) {
+        toggleTelemetryBtn.addEventListener('click', () => {
+            telemetryPanel.classList.toggle('hidden');
+        });
+    }
 
     const cameraBtn = document.getElementById('cameraBtn');
     const agentFileInput = document.getElementById('agentFileInput');
@@ -130,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function logTelemetry(msg) {
+        if (!telemetryLog) return;
         const line = document.createElement('div');
         const time = new Date().toLocaleTimeString();
         line.innerHTML = `<span class="text-stone-500">[${time}]</span> ${msg}`;
