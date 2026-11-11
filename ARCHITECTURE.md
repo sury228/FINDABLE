@@ -2,7 +2,7 @@
 
 > *"Toffee isn't a colour. ΔE 1.8 is."*
 
-Findable turns a single phone photograph of a beauty brand's swatches on standard white paper into mathematically measured, cryptographically signed **Shade Passports** that autonomous AI shopping agents (via MCP or Web Agent) can accurately discover, compare, and purchase through PayPal.
+Findable turns a single phone photograph of a beauty brand's swatches on standard white paper into mathematically measured, cryptographically signed **Shade Passports** that AI shopping agents (via MCP or Web Agent) can accurately discover, compare, and prepare for purchase through PayPal.
 
 ---
 
@@ -12,13 +12,13 @@ Findable turns a single phone photograph of a beauty brand's swatches on standar
 flowchart TD
     subgraph SellerSide ["1. Seller Onboarding & Measurement"]
         Priya["Seller (Priya)<br/>Phone Photo on White Paper"] --> Studio["Seller Studio (/studio)<br/>Canvas ROI Selection"]
-        Studio --> ColorPipeline["Color Pipeline (OpenCV, skimage)<br/>von Kries White Balance -> CIELAB -> ΔE2000"]
+        Studio --> ColorPipeline["Color Pipeline (NumPy, Pillow, skimage)<br/>von Kries White Balance -> CIELAB -> ΔE2000"]
         ColorPipeline --> PassportGen["Passport Generator<br/>Calculates ITA, Undertone, Confidence"]
         PassportGen --> SignedPassport["Shade Passport<br/>Canonical JSON + SHA-256 + HMAC"]
     end
 
     subgraph CoreBackend ["Findable Core Service (FastAPI + SQLModel on Render)"]
-        SQLite[(SQLite Database<br/>Shops, Products, Shades,<br/>Orders, Webhooks, Claims)]
+        SQLite[(SQLite Database<br/>Shops, Products, Shades,<br/>Orders, Webhooks, Logs)]
         SignedPassport --> SQLite
         Services["Domain Services (services.py)<br/>search_products, match_shade,<br/>create_checkout, get_order_status"]
         SQLite <--> Services
@@ -27,9 +27,10 @@ flowchart TD
     subgraph AgentShopping ["2. Agent Discovery & Shopping"]
         Shopper["Shopper / Current Foundation"] --> MeasureRef["Measure Tool (/measure)<br/>Generates REF-XXXX Code"]
         MeasureRef --> AgentChat["Shopper Agent<br/>(Claude Desktop via MCP / Web Agent)"]
-        AgentChat --> MCPServer["MCP Server (/mcp)<br/>Streamable HTTP Tools"]
+        MCPServer["MCP Server (/mcp)<br/>Streamable HTTP Tools"]
+        AgentChat --> MCPServer
         MCPServer <--> Services
-        AgentChat <--> WebAgent["Web Agent UI (/agent)<br/>LLM Tool-Calling Loop"]
+        AgentChat <--> WebAgent["Web Agent UI (/agent)<br/>Groq Tool-Calling Loop"]
         WebAgent <--> Services
     end
 
@@ -45,7 +46,7 @@ flowchart TD
     end
 
     subgraph SellerView ["4. Seller Operations"]
-        SQLite --> SellerDashboard["Seller Dashboard (/dashboard)<br/>AG Grid Real-time Orders & PayPal Call Log"]
+        SQLite --> SellerDashboard["Seller Dashboard (/dashboard)<br/>AG Grid Real-time Orders & PayPal Telemetry"]
     end
 ```
 
@@ -80,7 +81,7 @@ The foundation of Findable is physical color consistency across arbitrary consum
 ---
 
 ### 2.2 Shade Passport Cryptographic Specification (`app/passport.py`)
-To prevent hallucination, listing drift, or agent deception, every shade profile is serialized into a deterministic, signed **Shade Passport**.
+To prevent hallucination, listing drift, or agent deception, every shade profile is serialized into a deterministic, signed **Shade Passport** (tamper-evident, signed by Findable).
 
 ```json
 {
@@ -131,9 +132,8 @@ The MCP server exposes streamable HTTP tools over the standard protocol mounted 
 | `search_products` | `query`, `category`, `max_price`, `undertone`, `depth`, `limit` | List of candidate products with shade counts and verified passport badges | Read-only. Prices queried strictly from database. |
 | `match_shade` | `reference` (ref_code / hex / lab), `category`, `max_price`, `limit` | Ranked matching shades with calculated $\Delta E$, undertone delta, match rating, and explanation | Read-only. Algorithmic ranking via CIEDE2000. |
 | `get_shade_passport` | `shade_id` | Signed JSON Shade Passport document | Verifiable cryptographic proof of shade data. |
-| `create_checkout` | `items` (shade_id + quantity), `agent_name` | `order_id`, `approve_url`, `total`, `currency` | Server-authoritative pricing. Agent cannot capture or move funds. |
+| `create_checkout` | `items` (shade_id + quantity), `agent_name` | `order_id`, `approve_url`, `total`, `currency` | Server-authoritative pricing. The agent prepares the order; the shopper approves in PayPal. |
 | `get_order_status` | `order_id` | `status` (`CREATED`, `APPROVED`, `COMPLETED`, `REFUNDED`), `capture_id` | Enforces that agent cannot mark order "paid" until status is `COMPLETED`. |
-| `open_shade_promise` | `order_id`, `shade_id`, `ref_code` | Measured $\Delta E$, outcome (`REFUND`, `EXCHANGE`, `REJECTED`), `refund_id` | Automated, zero-friction PayPal refund upon optical mismatch. |
 
 ---
 
@@ -182,9 +182,6 @@ sequenceDiagram
 erDiagram
     Shop ||--o{ Product : owns
     Product ||--o{ Shade : contains
-    Shade ||--o{ PromiseClaim : references
-    Order ||--o{ PromiseClaim : originates
-
     Shop {
         string id PK
         string name
@@ -250,24 +247,21 @@ erDiagram
         datetime created_at
     }
 
+    PayPalLog {
+        int id PK
+        string method
+        string endpoint
+        int status
+        string debug_id
+        string mode
+        datetime created_at
+    }
+
     WebhookEvent {
         string paypal_event_id PK
         string event_type
         datetime received_at
         boolean processed
-    }
-
-    PromiseClaim {
-        string id PK
-        string order_id FK
-        string shade_id FK
-        float measured_L
-        float measured_a
-        float measured_b
-        float delta_e
-        string verdict
-        string refund_id
-        datetime created_at
     }
 ```
 
@@ -279,18 +273,17 @@ erDiagram
 |-------|-----------|------------------|
 | `/studio` | Seller Studio | Upload flat-lay swatch photograph, interactively draw paper reference box and shade swatches on HTML5 Canvas, view real-time raw vs corrected color chips, and commit to AG Grid. |
 | `/agent` | AI Shopping Agent | Conversational shopping interface with dual-input (natural language + swatch photo upload). Emits interactive match cards, $\Delta E$ gauges, and PayPal checkout triggers. Contains collapsible "Behind the Scenes" inspection console. |
-| `/dashboard` | Seller Operations | Real-time merchant dashboard powered by AG Grid Community displaying orders received via AI agents/web, passport verification badges, and live PayPal API call telemetry. |
+| `/dashboard` | Seller Operations | Real-time merchant dashboard powered by AG Grid Community displaying orders received via AI agents/web, passport verification badges, and live persistent PayPal API call telemetry (`PayPalLog`). |
 | `/shop/{shop_id}` | Direct Storefront | Clean customer-facing catalog showcasing shade swatches with calibrated digital chips and direct PayPal Smart Buttons. |
 | `/measure` | Reference Tool | Dedicated mobile-friendly camera utility for shoppers to swatch their current makeup and receive a permanent `REF-XXXX` identifier. |
 | `/passport/{shade_id}` | Passport Inspector | Public cryptographic verification page displaying raw CIELAB coordinates, ITA angles, and HMAC validation status. |
-| `/judges` | Hackathon Evaluator Walkthrough | One-click demo initialization, pre-seeded sample data, step-by-step evaluation checkpoints, and sandbox credentials guide. |
-| `/promise/{order_id}` | Shade Promise Portal | Post-purchase dispute resolution interface allowing instant photographic verification and automated PayPal refund execution. |
+| `/judges` | Hackathon Evaluator Walkthrough | 4-step 3-minute evaluation flow, pre-seeded sample data, step-by-step evaluation checkpoints, and sandbox credentials guide. |
 
 ---
 
 ## 5. Security & Idempotency Guarantees
 
 1. **Server-Authoritative Pricing**: Agent requests can specify `shade_id` and `quantity`, but item prices and order totals are unconditionally resolved against the internal SQLite database.
-2. **PayPal Request Idempotency**: All mutating operations (`create_order`, `capture_order`, `refund_order`) transmit deterministic `PayPal-Request-Id` headers.
+2. **PayPal Request Idempotency**: All mutating operations (`create_order`, `capture_order`, `refund_capture`) transmit deterministic `PayPal-Request-Id` headers.
 3. **Webhook Verification**: Incoming webhook payloads are validated against PayPal's public keys via `/v1/notifications/verify-webhook-signature` before any state transition.
 4. **Offline Resilience**: When `MOCK_PAYPAL=1` is configured, mock tokens and simulation endpoints activate, ensuring end-to-end local testing without external internet dependencies.

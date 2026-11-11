@@ -22,7 +22,7 @@ from app.color.pipeline import (
 from app.config import get_settings
 from app.db import get_session, init_db
 from app.llm.agent import run_agent_turn
-from app.models import BuyerReference, Order, Product, PromiseClaim, Shade, Shop
+from app.models import BuyerReference, Order, Product, Shade, Shop
 from app.passport import verify_passport, sign_passport, create_shade_passport_dict
 from app.paypal.client import paypal_client
 from app.paypal.webhooks import process_webhook_event, verify_webhook_signature
@@ -31,7 +31,6 @@ from app.services import (
     get_order_status,
     get_shade_passport_service,
     match_shade,
-    open_shade_promise,
     search_products,
 )
 
@@ -177,7 +176,6 @@ def dashboard_view(request: Request, session: Session = Depends(get_session)):
     """Seller operations dashboard with AG Grid orders and PayPal call telemetry."""
     from app.models import PayPalLog
     orders = session.exec(select(Order).order_by(Order.created_at.desc())).all()
-    claims = session.exec(select(PromiseClaim)).all()
     db_logs = session.exec(select(PayPalLog).order_by(PayPalLog.created_at.desc()).limit(15)).all()
 
     # If DB logs exist, format them for dashboard view; else fall back to in-memory call_logs
@@ -200,7 +198,6 @@ def dashboard_view(request: Request, session: Session = Depends(get_session)):
         name="dashboard.html",
         context={
             "orders": orders,
-            "claims": claims,
             "paypal_logs": paypal_logs,
             "is_mock": paypal_client.is_mock,
         },
@@ -233,17 +230,6 @@ def passport_view(shade_id: str, request: Request, session: Session = Depends(ge
         request=request,
         name="passport.html",
         context={"passport": passport, "is_valid": is_valid, "is_mock": paypal_client.is_mock},
-    )
-
-
-@app.get("/promise/{order_id}", response_class=HTMLResponse)
-def promise_view(order_id: str, request: Request, session: Session = Depends(get_session)):
-    """Automated Shade Promise dispute resolution portal."""
-    order = session.get(Order, order_id)
-    return templates.TemplateResponse(
-        request=request,
-        name="promise.html",
-        context={"order": order, "is_mock": paypal_client.is_mock},
     )
 
 
@@ -742,7 +728,6 @@ def api_demo_reset(session: Session = Depends(get_session)):
     """Reset database to initial pristine state for hackathon judges."""
     from app.db import seed_db
     from sqlmodel import delete
-    session.exec(delete(PromiseClaim))
     session.exec(delete(Order))
     # Delete measured shades but keep seeded ones
     session.exec(delete(Shade).where(Shade.source == "measured"))

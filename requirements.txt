@@ -12,14 +12,12 @@ pydantic-settings>=2.4.0
 
 # Computer Vision & Color Science
 numpy>=1.26.0
-opencv-python-headless>=4.10.0
+Pillow>=10.0.0
 scikit-image>=0.24.0
 
 # Model Context Protocol (MCP) & AI Providers
 mcp>=1.0.0
 groq>=0.11.0
-anthropic>=0.34.0
-google-genai>=0.1.1
 
 # Testing & Utilities
 pytest>=8.3.0

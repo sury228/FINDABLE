@@ -2,7 +2,7 @@
 
 > **"Toffee isn't a colour. ΔE 1.8 is."**
 >
-> One phone photo turns a small beauty brand's swatches into measured, cryptographically verifiable shade data that AI shopping agents can match, compare, and purchase directly through PayPal.
+> One phone photo turns a small beauty brand's swatches into measured, cryptographically verifiable shade data that AI shopping agents can match, compare, and prepare for purchase directly through PayPal.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -16,7 +16,7 @@
 ## The Problem
 
 - **Small brands use subjective names**: Independent beauty brands name their shades "Honey", "Toffee", or "Almond". A name is not an optical coordinate. AI shopping agents cannot match subjective naming against a customer's complexion, routinely routing buyers toward conglomerate brands with proprietary shade-matching apps.
-- **High Return Rates**: Foundation and concealer have an e-commerce return rate of ~23%, overwhelmingly driven by shade and undertone mismatch (*Eightx benchmarks*).
+- **High Return Rates**: Retail industry benchmarks show apparel and beauty return rates hover around 20–30%, with e-commerce averages at ~24.4% per National Retail Federation 2023 reports, overwhelmingly driven by shade and undertone mismatches.
 - **Cart Abandonment**: 60% of online shoppers hesitate to buy foundation without an objective shade validation tool (*Arbelle*).
 
 ---
@@ -25,12 +25,11 @@
 
 Findable empowers small indie sellers like Priya to create **Shade Passports** using nothing more than a smartphone photograph:
 1. **Physical Normalization**: Swatches are photographed alongside standard printer paper as a lighting calibration standard.
-2. **Computer Vision Calibration**: Inverts sRGB, computes von Kries linear channel balancing against the paper reference, strips texture/glare outliers, and maps values to CIELAB $(L^*, a^*, b^*)$ under standard D65 illuminant.
+2. **Color Calibration**: Inverts sRGB, computes von Kries linear channel balancing against the paper reference, strips texture/glare outliers, and maps values to CIELAB $(L^*, a^*, b^*)$ under standard D65 illuminant using NumPy, Pillow, and scikit-image.
 3. **Derived Metrics**: Calculates Individual Typology Angle ($\text{ITA}^\circ$), depth classification, hue angle undertone (Warm, Neutral, Cool), and measurement confidence index.
-4. **Shade Passport Cryptography**: Every shade is packaged into a canonical JSON passport, hashed with SHA-256, and signed via HMAC.
-5. **Autonomous Agent Purchasing via MCP**: An MCP server mounts at `/mcp`, permitting agents like Claude Desktop to search products, match shades using mathematical CIEDE2000 color difference ($\Delta E_{00}$), and initialize server-priced PayPal checkouts.
-6. **PayPal Checkout & Verified Webhooks**: The agent generates the order; human shoppers approve in PayPal. Capture returns verify the transaction, and cryptographic webhook signatures post the order to the seller's AG Grid dashboard.
-7. **Shade Promise (Automated Dispute Resolution)**: If a customer claims a mismatch, they re-photograph the swatch. If the measured $\Delta E_{00}$ exceeds tolerance, an automated PayPal refund is disbursed in seconds without manual disputes.
+4. **Shade Passport Cryptography**: Every shade is packaged into a canonical JSON passport, hashed with SHA-256, and signed via HMAC-SHA256 (tamper-evident, signed by Findable).
+5. **Agent Discovery & Tool Calling via MCP**: An MCP server mounts at `/mcp`, permitting agents like Claude Desktop to search products, match shades using mathematical CIEDE2000 color difference ($\Delta E_{00}$), and initialize server-priced PayPal checkouts.
+6. **PayPal Checkout & Verified Webhooks**: The agent prepares the order with server-authoritative pricing; the shopper approves in PayPal. Capture returns verify the transaction, and cryptographic webhook signatures post the order to the seller's AG Grid dashboard.
 
 ---
 
@@ -61,11 +60,38 @@ For full sequence diagrams, mathematical formulas, and data models, see [ARCHITE
 | **Backend** | Python 3.11+, FastAPI, Uvicorn, SQLModel | Single high-performance asynchronous service |
 | **Frontend** | Jinja2 Templates, Tailwind CSS (CDN), Vanilla JS / HTMX | Server-rendered, responsive, zero-build toolchain |
 | **Grids & Tables** | AG Grid Community (CDN) | Interactive seller shade catalogue & real-time order stream |
-| **Color Science** | OpenCV (headless), NumPy, scikit-image | von Kries white balancing, CIELAB conversion, $\Delta E_{00}$ |
-| **Agent / MCP** | FastMCP, Anthropic Claude / Google Gemini SDK | Streamable HTTP endpoint at `/mcp` & conversational web agent |
-| **Payments** | PayPal REST APIs (v2 Orders, v2 Payments, Webhooks) | Secure server-side order creation, captures, refunds, webhooks |
+| **Color Science** | NumPy, Pillow, scikit-image | von Kries white balancing, CIELAB conversion, $\Delta E_{00}$ |
+| **Agent / MCP** | FastMCP (`mcp` 2.x), Groq `llama-3.3-70b-versatile` | Streamable HTTP endpoint at `/mcp` & conversational web agent via OpenAI-compatible tool calling |
+| **Payments** | PayPal REST APIs (Orders v2, Payments v2, Webhooks) | Secure server-side order creation, captures, refunds, webhooks |
 | **Database** | SQLite + SQLModel ORM | Embedded relational database with automatic seed data |
-| **Deployment** | Render (`render.yaml`) | Instant deployable cloud blueprint |
+| **Deployment** | Render (`render.yaml`, plan: free) | Instant deployable cloud blueprint |
+
+---
+
+## PayPal API Integration
+
+All financial calculations and price resolutions are server-authoritative (agents can specify quantity and shade, never unit price):
+
+| PayPal API | Endpoint | Implementation File | Purpose |
+|---|---|---|---|
+| **Auth** | `POST /v1/oauth2/token` | `app/paypal/client.py` | OAuth2 Bearer token acquisition with in-memory caching |
+| **Orders v2 (Create)** | `POST /v2/checkout/orders` | `app/paypal/client.py` | Creates order with server-verified prices & passport bundle hash in `custom_id` |
+| **Orders v2 (Capture)** | `POST /v2/checkout/orders/{id}/capture` | `app/paypal/client.py` | Captures funds upon shopper return from PayPal |
+| **Payments v2 (Refund)** | `POST /v2/payments/captures/{id}/refund` | `app/paypal/client.py` | Disburses verified refunds against captured orders |
+| **Webhooks Verification** | `POST /v1/notifications/verify-webhook-signature` | `app/paypal/webhooks.py` | Cryptographically validates incoming webhooks against PayPal public keys |
+
+---
+
+## AI Model & Tool Calling
+
+- **Model**: Groq `llama-3.3-70b-versatile` with tool calling via the OpenAI-compatible API (`app/llm/agent.py`).
+- **Tools**:
+  - `search_products`: Filter products by price, coverage, finish, depth.
+  - `match_shade`: Calculate mathematical CIEDE2000 $\Delta E$ between reference code and catalog shades.
+  - `get_shade_passport`: Fetch canonical JSON hash and HMAC signature.
+  - `create_checkout`: Prepare a verified PayPal checkout with server-authoritative pricing.
+  - `get_order_status`: Real-time order telemetry tracking.
+- **Offline Fallback**: When `GROQ_API_KEY` is not configured, the agent executes local deterministic tool calling so judges can evaluate full capabilities without API quota limits.
 
 ---
 
@@ -74,60 +100,53 @@ For full sequence diagrams, mathematical formulas, and data models, see [ARCHITE
 ```text
 .
 ├── ARCHITECTURE.md              # Detailed architecture, flows, and color maths
-├── README.md                    # Project overview, setup, and submission guide
-├── requirements.txt             # Python runtime dependencies
-├── render.yaml                  # Render deployment blueprint
-├── .env.example                 # Example configuration template
+├── DEVPOST.md                   # Hackathon submission summary and fields
 ├── LICENSE                      # MIT Open Source License
+├── README.md                    # Project overview, setup, and evaluation guide
+├── render.yaml                  # Render deployment configuration (free plan)
+├── requirements.txt             # Python runtime dependencies
+├── .env.example                 # Example configuration template
 ├── app/
 │   ├── main.py                  # FastAPI entry point, page & API routes, mounts /mcp
 │   ├── config.py                # Pydantic Settings configuration loader
 │   ├── db.py                    # SQLite database engine & session dependency
 │   ├── models.py                # SQLModel table definitions (Shop, Product, Shade, Order, etc.)
 │   ├── passport.py              # Canonical JSON hashing & HMAC signing engine
-│   ├── services.py              # Search, match, checkout, status, promise service layer
-│   ├── mcp_server.py            # FastMCP streamable HTTP tool server definitions
+│   ├── services.py              # Search, match, checkout, and status service layer
+│   ├── mcp_server.py            # Model Context Protocol tools & streamable HTTP
 │   ├── color/
 │   │   ├── __init__.py
 │   │   ├── pipeline.py          # White balance, crop, linearize, LAB conversion
 │   │   └── metrics.py           # ITA, depth, undertone, confidence, and ΔE2000 metrics
 │   ├── llm/
 │   │   ├── __init__.py
-│   │   ├── client.py            # Vision & LLM tool wrapper (Claude / Gemini)
-│   │   ├── listing.py           # Product photo + seller caption -> listing generator
-│   │   └── agent.py             # Shopper conversational agent tool-calling loop
+│   │   ├── client.py            # Text generation wrapper with offline fallback
+│   │   ├── listing.py           # Product listing draft helper
+│   │   └── agent.py             # Shopper conversational agent with Groq tool calling
 │   ├── paypal/
 │   │   ├── __init__.py
-│   │   ├── client.py            # PayPal Orders v2, Payments v2, OAuth token cache
+│   │   ├── client.py            # PayPal Orders v2, Payments v2, OAuth client
 │   │   └── webhooks.py          # PayPal webhook signature verification & idempotency
 │   ├── templates/               # Jinja2 HTML templates
 │   │   ├── base.html            # Global layout with Tailwind CDN and navigation
 │   │   ├── studio.html          # Seller photo upload, canvas box drawing & AG Grid
 │   │   ├── agent.html           # Shopper conversational agent & match cards
 │   │   ├── dashboard.html       # Seller orders & PayPal API call telemetry
-│   │   ├── shop.html            # Public storefront with PayPal Smart Buttons
+│   │   ├── shop.html            # Public storefront with PayPal buttons
 │   │   ├── measure.html         # Shopper current-foundation calibration tool
 │   │   ├── passport.html        # Public Shade Passport verification page
-│   │   ├── judges.html          # 3-minute hackathon judge evaluation walkthrough
-│   │   └── promise.html         # Automated Shade Promise dispute resolution portal
-│   └── static/                  # Static assets
-│       ├── css/styles.css       # Custom styles
-│       └── js/
-│           ├── studio.js        # HTML5 Canvas ROI drawing & swatch selector
-│           ├── agent.js         # Chat UI and Behind-the-Scenes telemetry logger
-│           └── dashboard.js     # AG Grid initializers & event streams
-├── bench/                       # Benchmarking suite
-│   ├── run.py                   # Tri-condition accuracy & lighting benchmark script
-│   ├── queries.json             # 20 standardized foundation query profiles
-│   └── results.csv              # Benchmark execution metrics output
-├── data/
-│   └── seed/                    # Seed data
-│       └── seed_data.json       # Preloaded indie beauty brand catalog (Priya's Shop)
-└── tests/                       # Unit and integration test suites
-    ├── __init__.py
+│   │   └── judges.html          # 3-minute hackathon judge evaluation walkthrough
+│   └── static/                  # Static assets (CSS, JS)
+├── bench/                       # Benchmarks documentation
+│   └── README.md                # Real measurement benchmark roadmap
+└── tests/                       # Test suites
     ├── test_color.py            # Tests for color conversion and ΔE2000 accuracy
     ├── test_passport.py         # Tests for canonical hashing and HMAC verification
-    └── test_paypal.py           # Tests for PayPal client payload and mock execution
+    ├── test_paypal.py           # Tests for PayPal client payload and mock execution
+    ├── test_prompt3.py          # Tests for buyer reference and matching
+    ├── test_prompt4.py          # Tests for PayPal sandbox hardening and idempotency
+    ├── test_prompt5.py          # Tests for Groq tool calling agent and draft endpoints
+    └── test_prompt6.py          # Tests for MCP server tools and streamable HTTP mount
 ```
 
 ---
@@ -141,8 +160,8 @@ For full sequence diagrams, mathematical formulas, and data models, see [ARCHITE
 ### 2. Installation
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/findable.git
-cd findable
+git clone https://github.com/sury228/FINDABLE.git
+cd FINDABLE
 
 # Create and activate a virtual environment
 python -m venv .venv
@@ -160,7 +179,7 @@ Copy the template configuration file:
 ```bash
 cp .env.example .env
 ```
-Edit `.env` with your sandbox keys:
+Edit `.env` with your sandbox credentials:
 ```env
 # PayPal Sandbox Credentials
 PAYPAL_CLIENT_ID=your_sandbox_client_id
@@ -169,15 +188,15 @@ PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
 PAYPAL_WEBHOOK_ID=your_webhook_id
 
 # AI / LLM Configuration
-LLM_PROVIDER=anthropic  # or gemini
-LLM_API_KEY=your_api_key
-LLM_MODEL=claude-3-5-sonnet-20241022
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key
+LLM_MODEL=llama-3.3-70b-versatile
 
 # Application Settings
 APP_BASE_URL=http://localhost:8000
 DATABASE_URL=sqlite:///findable.db
 PASSPORT_SECRET=replace_with_a_random_32_byte_hex_string
-MOCK_PAYPAL=0  # Set to 1 to run fully offline without real PayPal credentials
+MOCK_PAYPAL=0  # Set to 1 to run offline without real PayPal credentials
 ```
 
 ### 4. Run the Application
@@ -185,11 +204,11 @@ MOCK_PAYPAL=0  # Set to 1 to run fully offline without real PayPal credentials
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 Navigate in your browser to:
-- **Seller Studio**: [http://localhost:8000/studio](http://localhost:8000/studio)
-- **AI Shopping Agent**: [http://localhost:8000/agent](http://localhost:8000/agent)
-- **Seller Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
 - **Judges Guided Demo**: [http://localhost:8000/judges](http://localhost:8000/judges)
-- **MCP Streamable Endpoint**: [http://localhost:8000/mcp](http://localhost:8000/mcp)
+- **Seller Studio**: [http://localhost:8000/studio](http://localhost:8000/studio)
+- **Shopper / Agent**: [http://localhost:8000/agent](http://localhost:8000/agent)
+- **Seller Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+- **MCP Discovery Info**: [http://localhost:8000/mcp-info](http://localhost:8000/mcp-info)
 
 ---
 
@@ -231,34 +250,16 @@ With the Findable server running (`uvicorn app.main:app` on port 8000), Claude D
 
 ### Available Tools
 1. `search_products`: Search cosmetic products by keyword, category, price, undertone, depth.
-2. `match_shade`: Calculate mathematical CIEDE2000 ΔE between a customer reference and catalog shades.
+2. `match_shade`: Calculate mathematical CIEDE2000 $\Delta E$ between a customer reference and catalog shades.
 3. `get_shade_passport`: Retrieve SHA-256 canonical hash & HMAC-SHA256 signature for a shade.
 4. `create_checkout`: Initialize a verified server-authoritative PayPal Orders v2 checkout.
 5. `get_order_status`: Real-time PayPal order status tracking.
 
-Restart Claude Desktop, and you can prompt:
-> *"My current foundation is REF-SAMPLE. Find me a match in Priya's catalog under $30 with a ΔE under 2.0, explain the match, and give me a checkout link."*
-
 ---
 
-## Benchmarking & Evaluation
+## Benchmarking
 
-Run the automated evaluation benchmark to measure color consistency and match accuracy:
-
-```bash
-python bench/run.py
-```
-
-### Test 1: Lighting Invariance ($\Delta E_{00}$)
-Evaluating 6 foundation swatches across three distinct illuminants (Daylight 6500K, Incandescent Warm 2700K, Cool White Fluorescent 4000K):
-- **Raw Camera Difference**: Mean $\Delta E_{00} \approx 6.8$ (visible mismatch)
-- **Findable Calibrated Difference**: Mean $\Delta E_{00} \approx 1.7$ (imperceptible to human eye)
-
-### Test 2: AI Agent Shade-Pick Accuracy
-Evaluating 20 reference queries against Priya's 12-shade catalog:
-- **Condition A (Traditional LLM on photos & names)**: ~35% acceptable pick rate
-- **Condition B (Raw Euclidean RGB distance)**: ~55% acceptable pick rate
-- **Condition C (Findable Calibrated CIELAB + $\Delta E_{00}$)**: **95% exact or within $\Delta E \le 2.0$**
+See [bench/README.md](bench/README.md) for the benchmark methodology roadmap. Synthetic or simulated benchmarks have been omitted to uphold scientific measurement integrity.
 
 ---
 

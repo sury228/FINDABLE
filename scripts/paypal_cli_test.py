@@ -75,13 +75,13 @@ async def run_paypal_flow():
         print(f"      [FAIL] Capture error: {e}")
         return
 
-    # 4. Payments v2 Refund (Shade Promise)
-    print("\n[4/4] Executing Shade Promise Automated Refund...")
+    # 4. Payments v2 Refund Verification
+    print("\n[4/4] Executing Payments v2 Verified Refund...")
     try:
         refund_res = await paypal_client.refund_capture(
             capture_id=capture_id,
             amount=28.00,
-            note_to_payer="Findable Shade Promise verification test refund.",
+            note_to_payer="Findable verified test refund.",
         )
         refund_id = refund_res.get("id")
         print(f"      [OK] Refund Status: {refund_res.get('status')}")

@@ -27,70 +27,32 @@
         <div id="ordersGrid" class="ag-theme-alpine w-full h-64 rounded-lg border border-[#262626]"></div>
     </div>
 
-    <!-- Dual Split: PayPal API Call Log & Shade Promise Claims -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- PayPal Call Telemetry -->
-        <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
-            <div class="flex justify-between items-center">
+    <!-- PayPal API Call Telemetry Audit Trail -->
+    <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
+        <div class="flex justify-between items-center">
+            <div>
                 <h3 class="text-sm font-bold text-white">PayPal REST Telemetry</h3>
-                <span class="text-[11px] font-mono text-[#71717a]">Live Audit Log</span>
+                <p class="text-xs text-[#71717a]">Live persistent audit log of Orders v2, Payments v2, and Webhook verification calls</p>
             </div>
-            <div class="bg-[#050505] border border-[#262626] rounded-lg p-3 text-xs font-mono text-[#a1a1aa] max-h-60 overflow-y-auto space-y-1.5">
-                {% if paypal_logs %}
-                    {% for log in paypal_logs %}
-                        <div class="flex justify-between items-center border-b border-[#1a1a1a] pb-1">
-                            <span class="text-[#a3e635] font-bold">{{ log.method }}</span>
-                            <span class="text-white truncate w-40">{{ log.endpoint }}</span>
-                            <span class="text-white">{{ log.status }}</span>
-                            <span class="text-[10px] text-[#71717a] font-mono">id: {{ log.debug_id }}</span>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="text-[#71717a] py-4 text-center">No recent calls recorded. Check out an order to stream telemetry.</div>
-                {% endif %}
-            </div>
+            <span class="text-[11px] font-mono text-[#a3e635] bg-[#141414] px-2.5 py-1 rounded border border-[#262626]">Live Audit Trail</span>
         </div>
-
-        <!-- Shade Promise Claims -->
-        <div class="bg-[#0d0d0d] border border-[#262626] rounded-xl p-5 space-y-3">
-            <div class="flex justify-between items-center">
-                <h3 class="text-sm font-bold text-white">Shade Promise Automated Claims</h3>
-                <span class="text-[11px] font-mono font-semibold text-[#a3e635] bg-[#141414] px-2 py-0.5 rounded border border-[#262626]">Instant Resolution</span>
-            </div>
-            <div class="border border-[#262626] rounded-lg overflow-hidden bg-[#050505]">
-                <table class="w-full text-left text-xs">
-                    <thead class="bg-[#141414] text-[#a1a1aa] border-b border-[#262626]">
-                        <tr>
-                            <th class="p-2.5">Claim ID</th>
-                            <th class="p-2.5">Order ID</th>
-                            <th class="p-2.5">Measured ΔE</th>
-                            <th class="p-2.5">Verdict</th>
-                            <th class="p-2.5">Refund ID</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-[#1a1a1a] text-white">
-                        {% if claims %}
-                            {% for c in claims %}
-                                <tr>
-                                    <td class="p-2.5 font-mono text-[#a1a1aa]">{{ c.id }}</td>
-                                    <td class="p-2.5 font-mono">{{ c.order_id }}</td>
-                                    <td class="p-2.5 font-bold text-[#a3e635]">ΔE {{ c.delta_e }}</td>
-                                    <td class="p-2.5">
-                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold {% if c.verdict == 'refund' %}bg-[#141414] text-[#a3e635] border border-[#262626]{% else %}bg-[#141414] text-white{% endif %}">
-                                            {{ c.verdict | upper }}
-                                        </span>
-                                    </td>
-                                    <td class="p-2.5 font-mono text-[10px] text-[#71717a]">{{ c.refund_id or '—' }}</td>
-                                </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="5" class="p-4 text-center text-[#71717a]">No dispute claims filed.</td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="bg-[#050505] border border-[#262626] rounded-lg p-3 text-xs font-mono text-[#a1a1aa] max-h-72 overflow-y-auto space-y-2">
+            {% if paypal_logs %}
+                {% for log in paypal_logs %}
+                    <div class="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-[#a3e635] font-bold w-12">{{ log.method }}</span>
+                            <span class="text-white">{{ log.endpoint }}</span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if log.status < 300 %}bg-[#141414] text-[#a3e635] border border-[#262626]{% else %}bg-red-950 text-red-400{% endif %}">HTTP {{ log.status }}</span>
+                            <span class="text-[10px] text-[#71717a] font-mono">debug_id: {{ log.debug_id }}</span>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-[#71717a] py-6 text-center">No recent calls recorded. Check out an order to stream telemetry.</div>
+            {% endif %}
         </div>
     </div>
 </div>

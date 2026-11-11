@@ -244,9 +244,9 @@ class PayPalClient:
         capture_id: str,
         amount: Optional[float] = None,
         currency: str = "USD",
-        note_to_payer: str = "Findable Shade Promise: Measured mismatch refund.",
+        note_to_payer: str = "Findable verified refund.",
     ) -> Dict[str, Any]:
-        """Disburse automated refund via Payments v2 for Shade Promise mismatch."""
+        """Issue refund via PayPal Payments v2."""
         if self.is_mock or capture_id.startswith("MOCK-"):
             refund_id = f"MOCK-REF-{uuid.uuid4().hex[:10].upper()}"
             res_data = {

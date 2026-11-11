@@ -113,20 +113,6 @@ class WebhookEvent(SQLModel, table=True):
     processed: bool = Field(default=True)
 
 
-class PromiseClaim(SQLModel, table=True):
-    """Post-purchase Shade Promise dispute and automated refund record."""
-    id: str = Field(default=None, primary_key=True)
-    order_id: str = Field(foreign_key="order.id", index=True)
-    shade_id: str = Field(foreign_key="shade.id", index=True)
-    measured_L: float
-    measured_a: float
-    measured_b: float
-    delta_e: float
-    verdict: str = Field(description="refund, exchange, rejected")
-    refund_id: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=utc_now)
-
-
 # ==============================================================================
 # Pydantic Schemas for DTOs & API Contracts
 # ==============================================================================

@@ -1,4 +1,4 @@
-"""Product listing generation using Vision LLM with offline fallback."""
+"""Product listing generation helper with offline fallback."""
 
 from typing import Optional
 from app.llm.client import LLMClient

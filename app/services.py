@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from app.color.metrics import calculate_ita, calculate_match_score, depth_from_ita, undertone_from_hue
 from app.color.pipeline import delta_e, hex_to_lab, lab_to_hex
 from app.config import get_settings
-from app.models import BuyerReference, Order, Product, PromiseClaim, Shade
+from app.models import BuyerReference, Order, Product, Shade
 from app.passport import compute_bundle_hash, create_shade_passport_dict, sign_passport
 from app.paypal.client import paypal_client
 
@@ -315,58 +315,4 @@ async def get_order_status(session: Session, order_id: str) -> Dict[str, Any]:
         "total": order.total,
         "currency": order.currency,
         "items": json.loads(order.items_json) if order.items_json else [],
-    }
-
-
-async def open_shade_promise(
-    session: Session,
-    order_id: str,
-    shade_id: str,
-    ref_code: str,
-) -> Dict[str, Any]:
-    """Automated dispute resolution: re-measure delivered shade and refund via PayPal if ΔE mismatch."""
-    order = session.get(Order, order_id)
-    shade = session.get(Shade, shade_id)
-    buyer_ref = session.get(BuyerReference, ref_code.upper())
-
-    if not order or not shade or not buyer_ref:
-        return {"verdict": "rejected", "reason": "Invalid order, shade, or reference code."}
-
-    measured_lab = [buyer_ref.L, buyer_ref.a, buyer_ref.b]
-    passport_lab = [shade.L, shade.a, shade.b]
-    d_e = delta_e(measured_lab, passport_lab)
-
-    verdict = "refund" if d_e > 2.5 else "rejected"
-    refund_id = None
-
-    if verdict == "refund" and order.capture_id:
-        refund_res = await paypal_client.refund_capture(
-            capture_id=order.capture_id,
-            amount=order.total,
-            note_to_payer=f"Findable Shade Promise: Measured ΔE was {d_e:.1f} (exceeds threshold 2.5). Full refund issued.",
-        )
-        refund_id = refund_res.get("id")
-        order.status = "REFUNDED"
-        session.add(order)
-
-    claim = PromiseClaim(
-        id=f"clm_{uuid.uuid4().hex[:8]}",
-        order_id=order.id,
-        shade_id=shade.id,
-        measured_L=buyer_ref.L,
-        measured_a=buyer_ref.a,
-        measured_b=buyer_ref.b,
-        delta_e=round(d_e, 2),
-        verdict=verdict,
-        refund_id=refund_id,
-    )
-    session.add(claim)
-    session.commit()
-
-    return {
-        "claim_id": claim.id,
-        "delta_e": round(d_e, 2),
-        "verdict": verdict,
-        "refund_id": refund_id,
-        "explanation": f"Measured difference ΔE is {d_e:.1f}. Automated refund {'processed' if refund_id else 'not triggered'}.",
     }
