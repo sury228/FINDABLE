@@ -680,6 +680,36 @@ def api_list_shades(session: Session = Depends(get_session)):
 
 
 # ==============================================================================
+# AI Marketing Draft API
+# ==============================================================================
+
+@app.post("/api/listing/draft")
+async def api_listing_draft(payload: Dict[str, Any]):
+    """Draft product description from shade labels using Vision/Text LLM."""
+    product_name = payload.get("product_name", "Clean Foundation")
+    category = payload.get("category", "foundation")
+    finish = payload.get("finish", "natural satin")
+    coverage = payload.get("coverage", "medium buildable")
+    seller_notes = payload.get("seller_notes")
+
+    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
+        return {"description": ""}
+
+    try:
+        from app.llm.listing import generate_product_listing
+        desc = await generate_product_listing(
+            product_name=product_name,
+            category=category,
+            finish=finish,
+            coverage=coverage,
+            seller_notes=seller_notes,
+        )
+        return {"description": desc}
+    except Exception as e:
+        return {"description": "", "error": str(e)}
+
+
+# ==============================================================================
 # Interactive API Endpoints for Frontend & MCP Agents
 # ==============================================================================
 

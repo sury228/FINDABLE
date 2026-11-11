@@ -14,6 +14,25 @@
                 Upload a swatch photo → draw Paper + Swatch boxes → get your REF code → find matches.
             </p>
         </div>
+        <div class="flex items-center gap-2">
+            <span id="agentModeBadge" class="text-[10px] font-mono px-2 py-0.5 rounded border border-[#333333] bg-[#141414] text-[#a1a1aa]">
+                mode: rules
+            </span>
+            <button id="toggleTelemetryBtn" class="text-[10px] font-mono px-2 py-0.5 rounded border border-[#333333] bg-[#141414] text-white hover:border-[#a3e635] transition">
+                ⚙ Behind the scenes
+            </button>
+        </div>
+    </div>
+
+    <!-- Behind the Scenes Telemetry Panel -->
+    <div id="telemetryPanel" class="hidden bg-[#0a0a0a] border border-[#262626] rounded-xl p-3 text-xs font-mono text-[#a1a1aa] space-y-2">
+        <div class="flex justify-between items-center text-[#71717a] border-b border-[#1f1f1f] pb-1">
+            <span>LLM Tool Calls & Diagnostics</span>
+            <span class="text-[10px]">Real-time execution</span>
+        </div>
+        <div id="telemetryLog" class="max-h-40 overflow-y-auto space-y-1 text-[11px]">
+            <div class="text-[#71717a]">Telemetry active. Tools and LLM calls will stream here.</div>
+        </div>
     </div>
 
     <!-- Measure Drawer (hidden until camera button clicked) -->

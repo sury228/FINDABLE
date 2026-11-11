@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # LLM Provider Configuration
     LLM_PROVIDER: Literal["anthropic", "gemini", "groq"] = "groq"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "claude-3-5-sonnet-20241022"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
 
     # Application Settings
     APP_BASE_URL: str = "http://localhost:8000"

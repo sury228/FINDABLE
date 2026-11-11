@@ -117,6 +117,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // ── Telemetry & Mode Badge ────────────────────────────────────────────────
+    const toggleTelemetryBtn = document.getElementById('toggleTelemetryBtn');
+    const telemetryPanel = document.getElementById('telemetryPanel');
+    const telemetryLog = document.getElementById('telemetryLog');
+    const agentModeBadge = document.getElementById('agentModeBadge');
+
+    if (toggleTelemetryBtn && telemetryPanel) {
+        toggleTelemetryBtn.addEventListener('click', () => {
+            telemetryPanel.classList.toggle('hidden');
+        });
+    }
+
+    function logTelemetry(msg) {
+        if (!telemetryLog) return;
+        const line = document.createElement('div');
+        const time = new Date().toLocaleTimeString();
+        line.innerHTML = `<span class="text-stone-500">[${time}]</span> ${msg}`;
+        telemetryLog.appendChild(line);
+        telemetryLog.scrollTop = telemetryLog.scrollHeight;
+    }
+
     // ── Chat Form ─────────────────────────────────────────────────────────────
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -125,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         appendMessage('user', message);
         userInput.value = '';
+        logTelemetry(`User -> Agent: "${message}"`);
 
         const typingEl = appendTypingIndicator();
 
@@ -137,12 +159,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             typingEl.remove();
 
+            // Update mode badge
+            if (agentModeBadge && data.mode) {
+                agentModeBadge.textContent = `mode: ${data.mode}`;
+                if (data.mode === 'llm') {
+                    agentModeBadge.className = 'text-[10px] font-mono px-2 py-0.5 rounded border border-[#a3e635] bg-[#141414] text-[#a3e635] font-bold';
+                } else {
+                    agentModeBadge.className = 'text-[10px] font-mono px-2 py-0.5 rounded border border-[#333333] bg-[#141414] text-[#a1a1aa]';
+                }
+            }
+
+            // Stream tools_called to Behind the scenes
+            if (data.tools_called && data.tools_called.length > 0) {
+                data.tools_called.forEach(t => {
+                    logTelemetry(`[Tool Invoked] <span class="text-[#a3e635] font-bold">${t.tool}</span>(${JSON.stringify(t.args)})`);
+                });
+            }
+
             appendMessage('agent', data.reply, data.cards);
             history.push({ role: 'user', content: message });
             history.push({ role: 'assistant', content: data.reply });
         } catch (err) {
             typingEl.remove();
             appendMessage('agent', 'Error processing request. Please check server logs.');
+            logTelemetry(`[Error] ${err.message}`);
         }
     });
 
