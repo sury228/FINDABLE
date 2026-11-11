@@ -19,9 +19,14 @@ async def verify_webhook_signature(
     webhook_id: str,
 ) -> bool:
     """Verify PayPal webhook authenticity using PayPal's verification endpoint."""
-    if settings.MOCK_PAYPAL or not webhook_id:
-        # In offline/mock mode or local test runs, bypass network signature check
+    if settings.MOCK_PAYPAL:
+        # In offline/mock mode bypass network signature check
         return True
+
+    # In live mode, verify_webhook_signature must return False when PAYPAL_WEBHOOK_ID is empty
+    if not webhook_id or not webhook_id.strip():
+        logger.warning("PayPal webhook verification failed: PAYPAL_WEBHOOK_ID is empty in live mode.")
+        return False
 
     token = await paypal_client.get_access_token()
     verify_url = f"{settings.PAYPAL_BASE_URL.rstrip('/')}/v1/notifications/verify-webhook-signature"
@@ -70,11 +75,18 @@ async def process_webhook_event(session: Session, event: Dict[str, Any]) -> bool
 
     if event_type == "PAYMENT.CAPTURE.COMPLETED":
         capture_id = resource.get("id")
-        # Find order by custom_id or capture reference
-        custom_id = resource.get("custom_id")
+        # Store invoice_id on Order model and look up by resource.invoice_id (fallback to capture id / custom_id)
+        invoice_id = resource.get("invoice_id")
         order = None
-        if custom_id:
-            order = session.exec(select(Order).where(Order.passport_bundle_hash == custom_id.replace("fdb:", ""))).first()
+        if invoice_id:
+            order = session.exec(select(Order).where(Order.invoice_id == invoice_id)).first()
+        if not order and capture_id:
+            order = session.exec(select(Order).where(Order.capture_id == capture_id)).first()
+        if not order:
+            custom_id = resource.get("custom_id")
+            if custom_id:
+                clean_custom = custom_id.replace("fdb:", "")
+                order = session.exec(select(Order).where(Order.passport_bundle_hash.startswith(clean_custom))).first()
 
         if order:
             order.status = "COMPLETED"
@@ -82,12 +94,18 @@ async def process_webhook_event(session: Session, event: Dict[str, Any]) -> bool
             session.add(order)
 
     elif event_type == "PAYMENT.CAPTURE.REFUNDED":
-        capture_id = resource.get("capture_id")
-        if capture_id:
+        # Look up by invoice_id or fall back to capture_id
+        invoice_id = resource.get("invoice_id")
+        capture_id = resource.get("capture_id") or resource.get("id")
+        order = None
+        if invoice_id:
+            order = session.exec(select(Order).where(Order.invoice_id == invoice_id)).first()
+        if not order and capture_id:
             order = session.exec(select(Order).where(Order.capture_id == capture_id)).first()
-            if order:
-                order.status = "REFUNDED"
-                session.add(order)
+
+        if order:
+            order.status = "REFUNDED"
+            session.add(order)
 
     session.commit()
     return True

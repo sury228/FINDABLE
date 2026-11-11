@@ -40,8 +40,12 @@ async def test_paypal_mock_order_lifecycle():
 
 
 @pytest.mark.asyncio
-async def test_paypal_mock_webhook_verification():
+async def test_paypal_mock_webhook_verification(monkeypatch):
     """Verify webhook signature verification gracefully accepts mock payloads in offline mode."""
+    from app.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "MOCK_PAYPAL", True)
+
     headers = {"paypal-auth-algo": "SHA256withRSA"}
     is_valid = await verify_webhook_signature(headers, b'{"event_type":"PAYMENT.CAPTURE.COMPLETED"}', "")
     assert is_valid is True

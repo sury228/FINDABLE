@@ -6,7 +6,7 @@ from typing import Generator
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.config import get_settings
-from app.models import Shop, Product, Shade, BuyerReference
+from app.models import Shop, Product, Shade, BuyerReference, PayPalLog
 
 settings = get_settings()
 

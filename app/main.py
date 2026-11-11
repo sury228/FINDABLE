@@ -149,7 +149,7 @@ def studio_view(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(
         request=request,
         name="studio.html",
-        context={"shop": shop, "products": products, "shades": shades},
+        context={"shop": shop, "products": products, "shades": shades, "is_mock": paypal_client.is_mock},
     )
 
 
@@ -166,15 +166,34 @@ def agent_view(request: Request):
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_view(request: Request, session: Session = Depends(get_session)):
     """Seller operations dashboard with AG Grid orders and PayPal call telemetry."""
+    from app.models import PayPalLog
     orders = session.exec(select(Order).order_by(Order.created_at.desc())).all()
     claims = session.exec(select(PromiseClaim)).all()
+    db_logs = session.exec(select(PayPalLog).order_by(PayPalLog.created_at.desc()).limit(15)).all()
+
+    # If DB logs exist, format them for dashboard view; else fall back to in-memory call_logs
+    if db_logs:
+        paypal_logs = [
+            {
+                "method": log.method,
+                "endpoint": log.endpoint,
+                "status": log.status,
+                "debug_id": log.debug_id or "-",
+                "mode": log.mode,
+            }
+            for log in db_logs
+        ]
+    else:
+        paypal_logs = paypal_client.call_logs[-15:]
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
         context={
             "orders": orders,
             "claims": claims,
-            "paypal_logs": paypal_client.call_logs[-15:],
+            "paypal_logs": paypal_logs,
+            "is_mock": paypal_client.is_mock,
         },
     )
 
@@ -190,7 +209,7 @@ def shop_view(shop_id: str, request: Request, session: Session = Depends(get_ses
     return templates.TemplateResponse(
         request=request,
         name="shop.html",
-        context={"shop": shop, "products": products, "shades": shades},
+        context={"shop": shop, "products": products, "shades": shades, "is_mock": paypal_client.is_mock},
     )
 
 
@@ -204,7 +223,7 @@ def passport_view(shade_id: str, request: Request, session: Session = Depends(ge
     return templates.TemplateResponse(
         request=request,
         name="passport.html",
-        context={"passport": passport, "is_valid": is_valid},
+        context={"passport": passport, "is_valid": is_valid, "is_mock": paypal_client.is_mock},
     )
 
 
@@ -215,7 +234,7 @@ def promise_view(order_id: str, request: Request, session: Session = Depends(get
     return templates.TemplateResponse(
         request=request,
         name="promise.html",
-        context={"order": order},
+        context={"order": order, "is_mock": paypal_client.is_mock},
     )
 
 
@@ -231,30 +250,95 @@ async def checkout_return(
     session: Session = Depends(get_session),
 ):
     """Handle shopper redirection after PayPal sandbox approval; captures the order."""
-    paypal_order_id = token
     order = None
 
     if internal_id:
         order = session.get(Order, internal_id)
-    elif paypal_order_id:
-        order = session.exec(select(Order).where(Order.paypal_order_id == paypal_order_id)).first()
+    elif token:
+        order = session.exec(select(Order).where(Order.paypal_order_id == token)).first()
 
     if not order:
-        order = session.exec(select(Order).order_by(Order.created_at.desc())).first()
+        raise HTTPException(status_code=404, detail="Order not found for return token/id.")
 
-    if order:
+    # Idempotent capture: if already completed, just redirect
+    if order.status == "COMPLETED":
+        return RedirectResponse(url="/dashboard?captured=true")
+
+    try:
         capture_res = await paypal_client.capture_order(order.paypal_order_id or "MOCK-ORD")
-        order.status = "COMPLETED"
-        order.capture_id = (
-            capture_res.get("purchase_units", [{}])[0]
-            .get("payments", {})
-            .get("captures", [{}])[0]
-            .get("id", f"CAP-{uuid.uuid4().hex[:8]}")
-        )
+    except Exception as e:
+        order.status = "FAILED"
         session.add(order)
         session.commit()
+        return HTMLResponse(
+            status_code=400,
+            content=f"""
+            <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;text-align:center;">
+                <h1 style="color:#ef4444;">PayPal Capture Failed</h1>
+                <p>Error communicating with PayPal: {e}</p>
+                <a href="/agent" style="color:#a3e635;">Return to Agent</a>
+            </body></html>
+            """
+        )
 
-    return RedirectResponse(url="/dashboard?captured=true")
+    # Validate PayPal capture status and amount
+    res_status = capture_res.get("status")
+    purchase_unit = capture_res.get("purchase_units", [{}])[0]
+    captures = purchase_unit.get("payments", {}).get("captures", [])
+    capture_obj = captures[0] if captures else {}
+    capture_status = capture_obj.get("status", res_status)
+    capture_amount_val = capture_obj.get("amount", {}).get("value")
+    capture_currency = capture_obj.get("amount", {}).get("currency_code")
+
+    is_amount_matching = True
+    if capture_amount_val:
+        try:
+            from decimal import Decimal
+            is_amount_matching = (
+                Decimal(str(capture_amount_val)) == Decimal(str(f"{order.total:.2f}"))
+                and (not capture_currency or capture_currency == order.currency)
+            )
+        except Exception:
+            is_amount_matching = False
+
+    if (res_status == "COMPLETED" or capture_status == "COMPLETED") and is_amount_matching:
+        order.status = "COMPLETED"
+        real_cap_id = capture_obj.get("id")
+        if real_cap_id:
+            order.capture_id = real_cap_id
+        elif paypal_client.is_mock:
+            order.capture_id = f"MOCK-CAP-{uuid.uuid4().hex[:8].upper()}"
+        else:
+            order.status = "FAILED"
+            session.add(order)
+            session.commit()
+            return HTMLResponse(
+                status_code=400,
+                content="""
+                <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;text-align:center;">
+                    <h1 style="color:#ef4444;">Capture Failed</h1>
+                    <p>No valid capture ID returned from PayPal.</p>
+                    <a href="/agent" style="color:#a3e635;">Return to Agent</a>
+                </body></html>
+                """
+            )
+        session.add(order)
+        session.commit()
+        return RedirectResponse(url="/dashboard?captured=true")
+    else:
+        order.status = "FAILED"
+        session.add(order)
+        session.commit()
+        return HTMLResponse(
+            status_code=400,
+            content=f"""
+            <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;text-align:center;">
+                <h1 style="color:#ef4444;">Payment Verification Failed</h1>
+                <p>Status: {res_status or capture_status}. Amount matching: {is_amount_matching}.</p>
+                <a href="/agent" style="color:#a3e635;">Return to Agent</a>
+            </body></html>
+            """
+        )
 
 
 @app.get("/checkout/cancel")
@@ -278,9 +362,9 @@ async def paypal_webhook_endpoint(
     headers = {
         "paypal-auth-algo": paypal_auth_algo or "",
         "paypal-cert-url": paypal_cert_url or "",
-        "transmission_id": paypal_transmission_id or "",
-        "transmission_sig": paypal_transmission_sig or "",
-        "transmission_time": paypal_transmission_time or "",
+        "paypal-transmission-id": paypal_transmission_id or "",
+        "paypal-transmission-sig": paypal_transmission_sig or "",
+        "paypal-transmission-time": paypal_transmission_time or "",
     }
 
     is_verified = await verify_webhook_signature(headers, body_bytes, settings.PAYPAL_WEBHOOK_ID)

@@ -190,10 +190,12 @@ async def create_checkout(
     agent_name: str = "web-agent",
 ) -> Dict[str, Any]:
     """Create a verified PayPal order strictly using database-authoritative pricing."""
+    from decimal import Decimal
+
     if not items:
         raise ValueError("Cart is empty. Please add at least one shade to your order.")
 
-    total_amount = 0.0
+    total_amount = Decimal("0.00")
     verified_items = []
     passport_hashes = []
 
@@ -202,18 +204,29 @@ async def create_checkout(
         if not shade_id:
             raise ValueError("Each item must include a shade_id.")
         qty = int(item.get("quantity", 1))
+        if qty <= 0:
+            raise ValueError("Quantity must be greater than zero.")
+
         shade = session.get(Shade, shade_id)
         if not shade:
             raise ValueError(f"Unknown shade_id: {shade_id}. Please check the catalog.")
+
         product = session.get(Product, shade.product_id)
-        price = product.price_usd if product else 28.00
-        line_total = price * qty
+        if not product:
+            raise ValueError(f"Product not found for shade {shade_id}.")
+
+        # Check stock
+        if product.stock < qty:
+            raise ValueError(f"Insufficient stock for {product.name} ({shade.shade_name}). Available: {product.stock}, requested: {qty}.")
+
+        price = Decimal(str(product.price_usd))
+        line_total = price * Decimal(qty)
         total_amount += line_total
 
         verified_items.append({
             "shade_id": shade.id,
-            "name": f"{product.name if product else 'Foundation'} - {shade.shade_name}",
-            "price": price,
+            "name": f"{product.name} - {shade.shade_name}",
+            "price": float(price),
             "quantity": qty,
         })
         if shade.passport_hash:
@@ -231,7 +244,7 @@ async def create_checkout(
 
     # Call PayPal client
     paypal_res = await paypal_client.create_order(
-        amount=total_amount,
+        amount=float(total_amount),
         currency="USD",
         items=verified_items,
         custom_id=custom_id,
@@ -251,9 +264,10 @@ async def create_checkout(
     order = Order(
         id=internal_order_id,
         paypal_order_id=paypal_order_id,
+        invoice_id=invoice_id,
         status="CREATED",
         items_json=json.dumps(verified_items),
-        total=total_amount,
+        total=float(total_amount),
         currency="USD",
         channel="agent" if "agent" in agent_name else "web",
         agent_name=agent_name,
@@ -265,8 +279,9 @@ async def create_checkout(
     return {
         "order_id": internal_order_id,
         "paypal_order_id": paypal_order_id,
+        "invoice_id": invoice_id,
         "approve_url": approve_url,
-        "total": total_amount,
+        "total": float(total_amount),
         "currency": "USD",
         "custom_id": custom_id,
     }

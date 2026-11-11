@@ -82,7 +82,8 @@ class Order(SQLModel, table=True):
     """Commerce order record linking agent purchase to PayPal transaction."""
     id: str = Field(default=None, primary_key=True)
     paypal_order_id: Optional[str] = Field(default=None, index=True)
-    status: str = Field(default="CREATED", description="CREATED, APPROVED, COMPLETED, REFUNDED")
+    invoice_id: Optional[str] = Field(default=None, index=True)
+    status: str = Field(default="CREATED", description="CREATED, APPROVED, COMPLETED, FAILED, REFUNDED")
     items_json: str = Field(description="Serialized JSON list of ordered items")
     total: float = Field(default=0.0)
     currency: str = Field(default="USD")
@@ -90,6 +91,17 @@ class Order(SQLModel, table=True):
     agent_name: Optional[str] = Field(default="claude-desktop")
     passport_bundle_hash: Optional[str] = Field(default=None)
     capture_id: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class PayPalLog(SQLModel, table=True):
+    """Persistent PayPal API request/response audit trail."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    method: str
+    endpoint: str
+    status: int
+    debug_id: Optional[str] = Field(default=None)
+    mode: str = Field(default="SANDBOX")
     created_at: datetime = Field(default_factory=utc_now)
 
 

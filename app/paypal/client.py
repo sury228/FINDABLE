@@ -26,16 +26,42 @@ class PayPalClient:
 
     def _log_call(self, method: str, endpoint: str, status_code: int, response_data: Any):
         """Record PayPal API call for dashboard telemetry and judge proof."""
-        self.call_logs.append({
+        debug_id = None
+        if isinstance(response_data, dict):
+            debug_id = response_data.get("debug_id")
+        if not debug_id:
+            debug_id = str(uuid.uuid4())[:8]
+
+        mode = "MOCK" if self.is_mock else "SANDBOX"
+        log_entry = {
             "timestamp": time.time(),
             "method": method,
             "endpoint": endpoint,
             "status": status_code,
-            "debug_id": response_data.get("debug_id") if isinstance(response_data, dict) else str(uuid.uuid4())[:8],
-            "mode": "MOCK" if self.is_mock else "SANDBOX",
-        })
+            "debug_id": debug_id,
+            "mode": mode,
+        }
+        self.call_logs.append(log_entry)
         if len(self.call_logs) > 50:
             self.call_logs.pop(0)
+
+        # Also persist to database
+        try:
+            from sqlmodel import Session
+            from app.db import engine
+            from app.models import PayPalLog
+            with Session(engine) as session:
+                db_log = PayPalLog(
+                    method=method,
+                    endpoint=endpoint,
+                    status=status_code,
+                    debug_id=debug_id,
+                    mode=mode,
+                )
+                session.add(db_log)
+                session.commit()
+        except Exception as e:
+            logger.warning("Failed to persist PayPalLog: %s", e)
 
     async def get_access_token(self) -> str:
         """Fetch and cache OAuth2 client credentials access token."""
